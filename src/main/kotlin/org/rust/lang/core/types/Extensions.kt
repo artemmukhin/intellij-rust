@@ -81,3 +81,5 @@ fun Ty.builtinDeref(explicit: Boolean = true): Pair<Ty, Mutability>? =
 val RsUnaryExpr.isDereference: Boolean get() = this.mul != null
 
 val RsExpr.isMutable: Boolean get() = mutabilityCategory?.isMutable ?: Mutability.DEFAULT_MUTABILITY.isMut
+
+val RsBinaryOp.isLazy: Boolean get() = andand != null || this.oror != null
