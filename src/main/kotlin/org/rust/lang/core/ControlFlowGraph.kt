@@ -7,6 +7,7 @@ package org.rust.lang.core
 
 import org.rust.lang.core.psi.*
 import org.rust.lang.core.psi.ext.RsElement
+import java.util.*
 
 sealed class CFGNode {
     data class AST(val element: RsElement) : CFGNode()
@@ -25,13 +26,17 @@ class CFG(body: RsBlock) {
     val entry: NodeIndex
     val exit: NodeIndex
 
+    private val loopScopes: Deque<LoopScope> = ArrayDeque<LoopScope>()
+
     init {
         this.entry = graph.addNode(CFGNode.Entry)
         this.owner = body.parent as RsElement
-        this.exit = graph.addNode(CFGNode.Exit)
+        val fnExit = graph.addNode(CFGNode.Exit)
 
-        val bodyExit = process(body.expr, entry)
-        addContainedEdge(bodyExit, this.exit)
+        val bodyExit = process(body, entry)
+        addContainedEdge(bodyExit, fnExit)
+
+        this.exit = fnExit
     }
 
     fun nodeIsReachable(item: RsElement) {
@@ -39,6 +44,8 @@ class CFG(body: RsBlock) {
     }
 
     fun addAstNode(element: RsElement, preds: List<NodeIndex>): NodeIndex = addNode(CFGNode.AST(element), preds)
+
+    fun addDummyNode(preds: List<NodeIndex>): NodeIndex = addNode(CFGNode.Dummy, preds)
 
     fun addNode(node: CFGNode, preds: List<NodeIndex>): NodeIndex {
         val newNode = graph.addNode(node)
@@ -117,10 +124,24 @@ class CFG(body: RsBlock) {
                 }
             }
 
-            // todo
             is RsWhileExpr -> {
-                pred
+                val loopback = addDummyNode(listOf(pred))
+
+                val exprExit = addAstNode(expr, emptyList())
+
+                val loopScope = LoopScope(expr, loopback, exprExit)
+                loopScopes.push(loopScope)
+
+                val conditionExit = process(expr.condition?.expr, loopback)
+
+                addContainedEdge(conditionExit, exprExit)
+
+                val bodyExit = process(expr.block, conditionExit)
+                addContainedEdge(bodyExit, loopback)
+                loopScopes.pop()
+                exprExit
             }
+
             // ...
 
             else -> pred
@@ -131,4 +152,4 @@ class CFG(body: RsBlock) {
 
 class BlockScope(val block: RsBlock, val breakIndex: NodeIndex)
 
-class LoopScope(val loop: RsLoopExpr, val continueIndex: NodeIndex, val breakIndex: NodeIndex)
+class LoopScope(val loop: RsExpr, val continueIndex: NodeIndex, val breakIndex: NodeIndex)
