@@ -230,8 +230,8 @@ class CFG(body: RsBlock) {
 
             is RsRetExpr -> {
                 val valueExit = process(expr.expr, pred)
-                val b = addAstNode(expr, listOf(valueExit))
-                addReturningEdge(b)
+                val returnExit = addAstNode(expr, listOf(valueExit))
+                addReturningEdge(returnExit)
                 addUnreachableNode()
             }
 
@@ -251,7 +251,44 @@ class CFG(body: RsBlock) {
 
             is RsCastExpr -> straightLine(expr, pred, listOf(expr.expr))
 
-            // ...
+            is RsMatchExpr -> {
+                val discriminantExit = process(expr.expr, pred)
+                val exprExit = addAstNode(expr, emptyList())
+
+                val prevGuards = ArrayDeque<NodeIndex>()
+
+                expr.matchBody?.matchArmList?.forEach { arm ->
+                    val armExit = addDummyNode(emptyList())
+
+                    arm.patList.forEach { pat ->
+                        var patExit = process(pat, discriminantExit)
+                        val guard = arm.matchArmGuard
+                        if (guard != null) {
+                            val guardStart = addDummyNode(listOf(patExit))
+                            val guardExit = process(guard, guardStart)
+
+                            while (prevGuards.isNotEmpty()) {
+                                val prev = prevGuards.pop()
+                                addContainedEdge(prev, guardStart)
+                            }
+
+                            prevGuards.push(guardExit)
+
+                            patExit = guardExit
+                        }
+
+                        addContainedEdge(patExit, armExit)
+                    }
+
+                    val bodyExit = process(arm.expr, armExit)
+
+                    addContainedEdge(bodyExit, exprExit)
+                }
+
+                exprExit
+            }
+
+        // ...
 
             else -> pred
         }
