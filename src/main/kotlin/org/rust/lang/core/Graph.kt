@@ -46,7 +46,6 @@ class Graph<N, E>(private val nodes: MutableList<Node<N>>, private val edges: Mu
             val idx = outgoingEdges(it)
             if (idx != INVALID_EDGE_INDEX) edges[idx.index].target else null
         }
-
 }
 
 class Node<N>(var firstOutEdge: EdgeIndex,

@@ -101,3 +101,5 @@ val RsExpr.isMutable: Boolean get() {
         else -> DEFAULT_MUTABILITY
     }
 }
+
+val RsBinaryOp.isLazy: Boolean get() = andand != null || this.oror != null
