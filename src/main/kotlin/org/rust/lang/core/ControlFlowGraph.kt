@@ -10,8 +10,8 @@ import org.rust.lang.core.psi.ext.RsElement
 import org.rust.lang.core.types.isLazy
 import java.util.*
 
-sealed class CFGNode {
-    data class AST(val element: RsElement) : CFGNode()
+sealed class CFGNode(val element: RsElement? = null) {
+    class AST(element: RsElement) : CFGNode(element)
     object Entry : CFGNode()
     object Exit : CFGNode()
     object Dummy : CFGNode()
@@ -29,6 +29,7 @@ class CFG(body: RsBlock) {
     private val loopScopes: Deque<LoopScope> = ArrayDeque<LoopScope>()
     private val breakableBlockScopes: Deque<BlockScope> = ArrayDeque<BlockScope>()
     private val fnExit: NodeIndex
+    private val body: RsBlock
 
     init {
         this.entry = graph.addNode(CFGNode.Entry)
@@ -39,11 +40,12 @@ class CFG(body: RsBlock) {
         addContainedEdge(bodyExit, fnExit)
 
         this.exit = fnExit
+        this.body = body
     }
 
-    fun nodeIsReachable(item: RsElement) {
-        graph.depthFirstTraversal(entry).any { graph.nodeData(it) == item }
-    }
+    fun isNodeReachable(item: RsElement) = graph.depthFirstTraversal(entry).any { graph.nodeData(it).element == item }
+
+    fun findUnreachableStmts() = body.stmtList.filter { !isNodeReachable(it) }
 
     private fun addAstNode(element: RsElement, preds: List<NodeIndex>): NodeIndex = addNode(CFGNode.AST(element), preds)
 
@@ -121,7 +123,8 @@ class CFG(body: RsBlock) {
         return when (stmt) {
             is RsLetDecl -> {
                 val initExit = process(stmt.expr, pred)
-                process(stmt.pat, initExit)
+                val exit = process(stmt.pat, initExit)
+                addAstNode(stmt, listOf(exit))
             }
 
             is RsFieldDecl, is RsLabelDecl -> pred
@@ -143,7 +146,7 @@ class CFG(body: RsBlock) {
         }
 
         return when (pat) {
-            is RsPatBinding, is RsPatRange, is RsPatConst, is RsPatWild -> addAstNode(pat, listOf(pred))
+            is RsPatBinding, is RsPatIdent, is RsPatRange, is RsPatConst, is RsPatWild -> addAstNode(pat, listOf(pred))
 
             is RsPatTup -> allPats(pat.patList)
 
@@ -250,6 +253,8 @@ class CFG(body: RsBlock) {
             is RsTupleExpr -> straightLine(expr, pred, expr.exprList)
 
             is RsCastExpr -> straightLine(expr, pred, listOf(expr.expr))
+
+            is RsLitExpr -> straightLine(expr, pred, emptyList())
 
             is RsMatchExpr -> {
                 val discriminantExit = process(expr.expr, pred)
