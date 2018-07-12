@@ -26,7 +26,7 @@ class CFGBuilder(val graph: Graph<CFGNode, CFGEdge>, val entry: NodeIndex, val e
     private val preds: Deque<NodeIndex> = ArrayDeque<NodeIndex>()
     private val pred: NodeIndex get() = preds.peek()
 
-    private fun finishWith(callable: () -> NodeIndex) { result = callable() }
+    private inline fun finishWith(callable: () -> NodeIndex) { result = callable() }
 
     private fun finishWith(value: NodeIndex) { result = value }
 
@@ -272,6 +272,17 @@ class CFGBuilder(val graph: Graph<CFGNode, CFGEdge>, val entry: NodeIndex, val e
 
     // todo: refactor
     override fun visitMatchExpr(matchExpr: RsMatchExpr) {
+
+        fun processGuard(guard: RsMatchArmGuard, prevGuards: ArrayDeque<NodeIndex>, guardStart: NodeIndex): NodeIndex {
+            val guardExit = process(guard, guardStart)
+
+            prevGuards.forEach { addContainedEdge(it, guardStart) }
+            prevGuards.clear()
+            prevGuards.push(guardExit)
+
+            return guardExit
+        }
+
         val discriminantExit = process(matchExpr.expr, pred)
         val exprExit = addAstNode(matchExpr, emptyList())
 
@@ -285,23 +296,12 @@ class CFGBuilder(val graph: Graph<CFGNode, CFGEdge>, val entry: NodeIndex, val e
                 val guard = arm.matchArmGuard
                 if (guard != null) {
                     val guardStart = addDummyNode(listOf(patExit))
-                    val guardExit = process(guard, guardStart)
-
-                    while (prevGuards.isNotEmpty()) {
-                        val prev = prevGuards.pop()
-                        addContainedEdge(prev, guardStart)
-                    }
-
-                    prevGuards.push(guardExit)
-
-                    patExit = guardExit
+                    patExit = processGuard(guard, prevGuards, guardStart)
                 }
-
                 addContainedEdge(patExit, armExit)
             }
 
             val bodyExit = process(arm.expr, armExit)
-
             addContainedEdge(bodyExit, exprExit)
         }
 
