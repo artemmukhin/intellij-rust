@@ -21,20 +21,20 @@ class CFGBuilder(val graph: Graph<CFGNode, CFGEdge>, val entry: NodeIndex, val e
 
     val loopScopes: Deque<LoopScope> = ArrayDeque<LoopScope>()
     val breakableBlockScopes: Deque<BlockScope> = ArrayDeque<BlockScope>()
-
     var result: NodeIndex? = null
 
-    private fun finishWith(callable: () -> NodeIndex) {
-        result = callable()
-    }
-
-    private fun finishWith(value: NodeIndex) {
-        result = value
-    }
-
     private val preds: Deque<NodeIndex> = ArrayDeque<NodeIndex>()
-
     private val pred: NodeIndex get() = preds.peek()
+
+    private fun finishWith(callable: () -> NodeIndex) { result = callable() }
+
+    private fun finishWith(value: NodeIndex) { result = value }
+
+    private fun withLoopScope(loopScope: LoopScope, callable: () -> Unit) {
+        loopScopes.push(loopScope)
+        callable()
+        loopScopes.pop()
+    }
 
     private fun addAstNode(element: RsElement, preds: List<NodeIndex>): NodeIndex = addNode(CFGNode.AST(element), preds)
 
@@ -183,34 +183,44 @@ class CFGBuilder(val graph: Graph<CFGNode, CFGEdge>, val entry: NodeIndex, val e
 
     override fun visitWhileExpr(whileExpr: RsWhileExpr) {
         val loopback = addDummyNode(listOf(pred))
-
         val exprExit = addAstNode(whileExpr, emptyList())
-
         val loopScope = LoopScope(whileExpr, loopback, exprExit)
-        loopScopes.push(loopScope)
 
-        val conditionExit = process(whileExpr.condition?.expr, loopback)
-        addContainedEdge(conditionExit, exprExit)
+        withLoopScope(loopScope) {
+            val conditionExit = process(whileExpr.condition?.expr, loopback)
+            addContainedEdge(conditionExit, exprExit)
 
-        val bodyExit = process(whileExpr.block, conditionExit)
-        addContainedEdge(bodyExit, loopback)
+            val bodyExit = process(whileExpr.block, conditionExit)
+            addContainedEdge(bodyExit, loopback)
+        }
 
-        loopScopes.pop()
         finishWith(exprExit)
     }
 
     override fun visitLoopExpr(loopExpr: RsLoopExpr) {
         val loopback = addDummyNode(listOf(pred))
-
         val exprExit = addAstNode(loopExpr, emptyList())
-
         val loopScope = LoopScope(loopExpr, loopback, exprExit)
-        loopScopes.push(loopScope)
 
-        val bodyExit = process(loopExpr.block, loopback)
-        addContainedEdge(bodyExit, loopback)
+        withLoopScope(loopScope) {
+            val bodyExit = process(loopExpr.block, loopback)
+            addContainedEdge(bodyExit, loopback)
+        }
 
-        loopScopes.pop()
+        finishWith(exprExit)
+    }
+
+    // todo: not sure it is right because rustc uses HIR (where ForExpr replaced by LoopExpr) instead of AST
+    override fun visitForExpr(forExpr: RsForExpr) {
+        val loopback = addDummyNode(listOf(pred))
+        val exprExit = addAstNode(forExpr, emptyList())
+        val loopScope = LoopScope(forExpr, loopback, exprExit)
+
+        withLoopScope(loopScope) {
+            val bodyExit = process(forExpr.block, loopback)
+            addContainedEdge(bodyExit, loopback)
+        }
+
         finishWith(exprExit)
     }
 
@@ -254,6 +264,9 @@ class CFGBuilder(val graph: Graph<CFGNode, CFGEdge>, val entry: NodeIndex, val e
     override fun visitCastExpr(castExpr: RsCastExpr) =
         finishWith { straightLine(castExpr, pred, listOf(castExpr.expr)) }
 
+    override fun visitDotExpr(dotExpr: RsDotExpr) =
+        finishWith { straightLine(dotExpr, pred, listOf(dotExpr.expr)) }
+
     override fun visitLitExpr(litExpr: RsLitExpr) =
         finishWith { straightLine(litExpr, pred, emptyList()) }
 
@@ -294,6 +307,9 @@ class CFGBuilder(val graph: Graph<CFGNode, CFGEdge>, val entry: NodeIndex, val e
 
         finishWith(exprExit)
     }
+
+    // todo
+    override fun visitParenExpr(parenExpr: RsParenExpr) {}
 
     override fun visitElement(element: RsElement) = finishWith(pred)
 }
