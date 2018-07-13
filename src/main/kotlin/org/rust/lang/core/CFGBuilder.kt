@@ -109,11 +109,7 @@ class CFGBuilder(val graph: Graph<CFGNode, CFGEdge>, val entry: NodeIndex, val e
 
 
     override fun visitBlock(block: RsBlock) {
-        var stmtsExit = pred
-        block.stmtList.forEach {
-            stmtsExit = process(it, stmtsExit)
-        }
-
+        val stmtsExit = block.stmtList.fold(pred) { pred, stmt -> process(stmt, pred) }
         val blockExpr = block.expr
         val exprExit = process(blockExpr, stmtsExit)
 
