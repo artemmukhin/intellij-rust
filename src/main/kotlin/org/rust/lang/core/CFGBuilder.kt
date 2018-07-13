@@ -19,12 +19,12 @@ class CFGBuilder(val graph: Graph<CFGNode, CFGEdge>, val entry: NodeIndex, val e
 
     data class Destination(val label: RsLabel?, val target: RsElement)
 
-    val loopScopes: Deque<LoopScope> = ArrayDeque<LoopScope>()
-    val breakableBlockScopes: Deque<BlockScope> = ArrayDeque<BlockScope>()
-    var result: NodeIndex? = null
 
+    private var result: NodeIndex? = null
     private val preds: Deque<NodeIndex> = ArrayDeque<NodeIndex>()
     private val pred: NodeIndex get() = preds.peek()
+    private val loopScopes: Deque<LoopScope> = ArrayDeque<LoopScope>()
+    private val breakableBlockScopes: Deque<BlockScope> = ArrayDeque<BlockScope>()
 
     private inline fun finishWith(callable: () -> NodeIndex) { result = callable() }
 
