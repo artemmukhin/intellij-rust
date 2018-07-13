@@ -428,6 +428,11 @@
                          enabledByDefault="true" level="WEAK WARNING"
                          implementationClass="org.rust.ide.inspections.RsSortImplTraitMembersInspection"/>
 
+        <localInspection language="Rust" groupName="Rust"
+                         displayName="Unreachable statement"
+                         enabledByDefault="true" level="WEAK WARNING"
+                         implementationClass="org.rust.ide.inspections.RsUnreachableCodeInspection"/>
+
         <!-- Surrounders -->
 
         <lang.surroundDescriptor language="Rust"
