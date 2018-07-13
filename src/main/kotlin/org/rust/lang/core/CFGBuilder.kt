@@ -151,6 +151,12 @@ class CFGBuilder(val graph: Graph<CFGNode, CFGEdge>, val entry: NodeIndex, val e
     override fun visitPatWild(patWild: RsPatWild) =
         finishWith { addAstNode(patWild, listOf(pred)) }
 
+    override fun visitPathExpr(pathExpr: RsPathExpr) =
+        finishWith { addAstNode(pathExpr, listOf(pred)) }
+
+    override fun visitRangeExpr(rangeExpr: RsRangeExpr) =
+        finishWith { addAstNode(rangeExpr, listOf(pred)) }
+
     override fun visitPatTup(patTup: RsPatTup) =
         finishWith { allPats(patTup, patTup.patList) }
 
@@ -270,9 +276,7 @@ class CFGBuilder(val graph: Graph<CFGNode, CFGEdge>, val entry: NodeIndex, val e
     override fun visitLitExpr(litExpr: RsLitExpr) =
         finishWith { straightLine(litExpr, pred, emptyList()) }
 
-    // todo: refactor
     override fun visitMatchExpr(matchExpr: RsMatchExpr) {
-
         fun processGuard(guard: RsMatchArmGuard, prevGuards: ArrayDeque<NodeIndex>, guardStart: NodeIndex): NodeIndex {
             val guardExit = process(guard, guardStart)
 
@@ -308,8 +312,10 @@ class CFGBuilder(val graph: Graph<CFGNode, CFGEdge>, val entry: NodeIndex, val e
         finishWith(exprExit)
     }
 
+    override fun visitParenExpr(parenExpr: RsParenExpr) = parenExpr.expr.accept(this)
+
     // todo
-    override fun visitParenExpr(parenExpr: RsParenExpr) {}
+    override fun visitTryExpr(tryExpr: RsTryExpr) {}
 
     override fun visitElement(element: RsElement) = finishWith(pred)
 }
