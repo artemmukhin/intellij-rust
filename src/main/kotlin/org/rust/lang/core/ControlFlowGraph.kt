@@ -8,6 +8,7 @@ package org.rust.lang.core
 import org.rust.lang.core.psi.*
 import org.rust.lang.core.psi.ext.RsElement
 import org.rust.lang.core.psi.ext.ancestors
+import org.rust.lang.core.psi.ext.valueParameters
 import org.rust.lang.core.types.ty.TyNever
 import org.rust.lang.core.types.type
 
@@ -46,6 +47,32 @@ class CFG(body: RsBlock) {
     fun isNodeReachable(item: RsElement) = graph.depthFirstTraversal(entry).any { graph.nodeData(it).element == item }
 
     fun findUnreachableStatements() = body.stmtList.filter { !isNodeReachable(it) }
+
+    fun buildLocalIndex(): HashMap<RsElement, MutableList<NodeIndex>> {
+        val table = hashMapOf<RsElement, MutableList<NodeIndex>>()
+        val func = body.parent
+
+        if (func is RsFunction) {
+            val formals = object : RsVisitor() {
+                override fun visitPat(pat: RsPat) {
+                    table.getOrPut(pat, { mutableListOf() }).add(entry)
+                    pat.acceptChildren(this)
+                }
+            }
+
+            func.valueParameters.map { it -> it.pat }.forEach { pat ->
+                if (pat != null) formals.visitPat(pat)
+            }
+        }
+
+        graph.forEachNode { i, node ->
+            val element = node.data.element
+            if (element != null)
+                table.getOrPut(element, { mutableListOf() }).add(i)
+        }
+
+        return table
+    }
 }
 
 
