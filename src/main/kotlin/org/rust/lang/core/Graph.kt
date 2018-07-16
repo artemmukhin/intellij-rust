@@ -5,7 +5,7 @@
 
 package org.rust.lang.core
 
-class Graph<N, E>(private val nodes: MutableList<Node<N>>, private val edges: MutableList<Edge<E>>) {
+class Graph<N, E>(val nodes: MutableList<Node<N>>, val edges: MutableList<Edge<E>>) {
     constructor() : this(mutableListOf(), mutableListOf())
 
     private fun nextNodeIndex(): NodeIndex = NodeIndex(nodes.size)
