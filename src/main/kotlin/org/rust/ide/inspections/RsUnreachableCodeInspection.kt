@@ -16,12 +16,12 @@ class RsUnreachableCodeInspection : RsLocalInspectionTool() {
         object : RsVisitor() {
             override fun visitBlock(block: RsBlock) {
                 val cfg = CFG(block)
-                val unreachableStatements = cfg.findUnreachableStmts()
+                val unreachableStatements = cfg.findUnreachableStmts().drop(1)
                 unreachableStatements.forEach { registerProblem(holder, it) }
             }
         }
 
     private fun registerProblem(holder: ProblemsHolder, statement: RsStmt) {
-        holder.registerProblem(statement, "Unreachable statement `${statement.text}`")
+        holder.registerProblem(statement, "Unreachable statement")
     }
 }
