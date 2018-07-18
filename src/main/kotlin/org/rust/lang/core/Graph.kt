@@ -5,7 +5,7 @@
 
 package org.rust.lang.core
 
-class Graph<N, E>(private val nodes: MutableList<Node<N>>, private val edges: MutableList<Edge<E>>) {
+class Graph<N, E>(val nodes: MutableList<Node<N>>, val edges: MutableList<Edge<E>>) {
     constructor() : this(mutableListOf(), mutableListOf())
 
     private fun nextNodeIndex(): NodeIndex = NodeIndex(nodes.size)
@@ -46,12 +46,13 @@ class Graph<N, E>(private val nodes: MutableList<Node<N>>, private val edges: Mu
             val idx = outgoingEdges(it)
             if (idx != INVALID_EDGE_INDEX) edges[idx.index].target else null
         }
+
+    fun forEachNode(f: (NodeIndex, Node<N>) -> Unit) = nodes.forEachIndexed { index, node -> f(NodeIndex(index), node) }
 }
 
 class Node<N>(var firstOutEdge: EdgeIndex,
               var firstInEdge: EdgeIndex,
-              val data: N) {
-}
+              val data: N)
 
 private val INVALID_EDGE_INDEX: EdgeIndex = EdgeIndex(Int.MAX_VALUE)
 
@@ -59,8 +60,7 @@ class Edge<E>(val nextSourceEdge: EdgeIndex,
               val nextTargetEdge: EdgeIndex,
               val source: NodeIndex,
               val target: NodeIndex,
-              val data: E) {
-}
+              val data: E)
 
 class NodeIndex(val index: Int)
 class EdgeIndex(val index: Int)
