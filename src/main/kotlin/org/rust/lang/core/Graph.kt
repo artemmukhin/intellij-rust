@@ -5,6 +5,8 @@
 
 package org.rust.lang.core
 
+import java.util.*
+
 class Graph<N, E>(val nodes: MutableList<Node<N>>, val edges: MutableList<Edge<E>>) {
     constructor() : this(mutableListOf(), mutableListOf())
 
@@ -37,17 +39,66 @@ class Graph<N, E>(val nodes: MutableList<Node<N>>, val edges: MutableList<Edge<E
 
     fun nodeData(idx: NodeIndex) = nodes[idx.index].data
 
-    fun outgoingEdges(source: NodeIndex) = nodes[source.index].firstOutEdge
+    val nodeIndices get(): List<NodeIndex> = nodes.mapIndexed { index, _ -> NodeIndex(index) }
 
-    fun incomingEdges(target: NodeIndex) = nodes[target.index].firstInEdge
+    fun outgoingEdges(source: NodeIndex): Sequence<EdgeIndex> =
+        generateSequence(nodes[source.index].firstOutEdge) {
+            edges[it.index].nextSourceEdge
+        }
 
-    fun depthFirstTraversal(startNode: NodeIndex): Sequence<NodeIndex> =
-        generateSequence(startNode) {
-            val idx = outgoingEdges(it)
-            if (idx != INVALID_EDGE_INDEX) edges[idx.index].target else null
+    fun incomingEdges(target: NodeIndex): Sequence<EdgeIndex> =
+        generateSequence(nodes[target.index].firstInEdge) {
+            edges[it.index].nextTargetEdge
         }
 
     fun forEachNode(f: (NodeIndex, Node<N>) -> Unit) = nodes.forEachIndexed { index, node -> f(NodeIndex(index), node) }
+
+    fun depthFirstTraversal(startNode: NodeIndex): Sequence<NodeIndex> {
+        val visited = mutableSetOf(startNode)
+        val stack = ArrayDeque<NodeIndex>()
+        stack.push(startNode)
+
+        val visit = { node: NodeIndex -> if (visited.add(node)) stack.push(node) }
+
+        return generateSequence {
+            val next = stack.poll()
+            if (next != null) {
+                outgoingEdges(next).forEach { edge ->
+                    val target = edges[edge.index].target
+                    visit(target)
+                }
+            }
+            next
+        }
+    }
+
+    // todo
+    /*
+    fun nodesInPostorder(entryNode: NodeIndex): List<NodeIndex> {
+        val visited = mutableSetOf<NodeIndex>()
+        val stack = ArrayDeque<Pair<NodeIndex, Sequence<EdgeIndex>>>()
+        val result = mutableListOf<NodeIndex>()
+        val pushNode = { node: NodeIndex ->
+            if (visited.add(node)) stack.push(Pair(node, outgoingEdges(node)))
+        }
+
+        val nodesWithEntry = listOf(entryNode) + nodeIndices
+        for (node in nodesWithEntry) {
+            var stackHead = stack.poll()
+            while (stackHead != null) {
+                val (node, iter) = stackHead
+
+            }
+        }
+        nodesWithEntry.forEach { node ->
+            pushNode(node)
+            val (node, iter) = stack.poll()
+            for ((node, iter) in stack) {
+            }
+            while ()
+        }
+    }
+    */
 }
 
 class Node<N>(var firstOutEdge: EdgeIndex,
