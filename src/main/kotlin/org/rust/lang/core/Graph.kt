@@ -43,12 +43,12 @@ class Graph<N, E>(val nodes: MutableList<Node<N>>, val edges: MutableList<Edge<E
 
     fun outgoingEdges(source: NodeIndex): Sequence<EdgeIndex> =
         generateSequence(nodes[source.index].firstOutEdge) {
-            edges[it.index].nextSourceEdge
+            if (it != INVALID_EDGE_INDEX) edges[it.index].nextSourceEdge else null
         }
 
     fun incomingEdges(target: NodeIndex): Sequence<EdgeIndex> =
         generateSequence(nodes[target.index].firstInEdge) {
-            edges[it.index].nextTargetEdge
+            if (it != INVALID_EDGE_INDEX) edges[it.index].nextTargetEdge else null
         }
 
     fun forEachNode(f: (NodeIndex, Node<N>) -> Unit) = nodes.forEachIndexed { index, node -> f(NodeIndex(index), node) }
@@ -64,8 +64,10 @@ class Graph<N, E>(val nodes: MutableList<Node<N>>, val edges: MutableList<Edge<E
             val next = stack.poll()
             if (next != null) {
                 outgoingEdges(next).forEach { edge ->
-                    val target = edges[edge.index].target
-                    visit(target)
+                    if (edge != INVALID_EDGE_INDEX) {
+                        val target = edges[edge.index].target
+                        visit(target)
+                    }
                 }
             }
             next
