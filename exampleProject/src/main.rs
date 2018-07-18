@@ -1,3 +1,3 @@
-fn main(x: u8) {
+fn main() {
     println!("Hello, World");
 }
