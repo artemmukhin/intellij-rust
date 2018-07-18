@@ -16,7 +16,7 @@ class RsUnreachableCodeInspection : RsLocalInspectionTool() {
         object : RsVisitor() {
             override fun visitBlock(block: RsBlock) {
                 val cfg = CFG(block)
-                val unreachableStatements = cfg.findUnreachableStmts().drop(1)
+                val unreachableStatements = cfg.findUnreachableStatements().drop(1)
                 unreachableStatements.forEach { registerProblem(holder, it) }
             }
         }
