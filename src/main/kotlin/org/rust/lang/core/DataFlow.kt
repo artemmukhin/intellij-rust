@@ -22,7 +22,7 @@ class DataFlowContext<O : DataFlowOperator>(val analysisName: String,
     val scopeKills: MutableList<Int>    // todo: maybe it's better to use BitSet
     val actionKills: MutableList<Int>   //
     val onEntry: MutableList<Int>
-    val localIndexTable: HashMap<RsElement, MutableList<NodeIndex>>
+    val localIndexTable: HashMap<RsElement, MutableList<CFGIndex>>
 
     init {
         val numNodes = cfg.graph.nodes.size
@@ -40,7 +40,7 @@ class DataFlowContext<O : DataFlowOperator>(val analysisName: String,
 
     private fun hasBitsetForLocalElement(element: RsElement): Boolean = localIndexTable.containsKey(element)
 
-    fun computeIdRange(idx: NodeIndex): Pair<Int, Int> {
+    fun computeIdRange(idx: CFGIndex): Pair<Int, Int> {
         val start = idx.index * wordsPerId
         val end = start + wordsPerId
         return Pair(start, end)
@@ -73,7 +73,7 @@ class DataFlowContext<O : DataFlowOperator>(val analysisName: String,
         }
     }
 
-    fun applyGenKill(idx: NodeIndex, bits: List<Int>): MutableList<Int> {
+    fun applyGenKill(idx: CFGIndex, bits: List<Int>): MutableList<Int> {
         val (start, end) = computeIdRange(idx)
         val result = bits.toMutableList()
         Union.bitwise(result, gens.subList(start, end))
@@ -88,7 +88,7 @@ class DataFlowContext<O : DataFlowOperator>(val analysisName: String,
         return indices.all { eachBitForNode(EntryOrExit.Entry, it, f) }
     }
 
-    fun eachBitForNode(e: EntryOrExit, idx: NodeIndex, f: (Int) -> Boolean): Boolean {
+    fun eachBitForNode(e: EntryOrExit, idx: CFGIndex, f: (Int) -> Boolean): Boolean {
         if (bitsPerId == 0) return true
 
         val (start, end) = computeIdRange(idx)
@@ -165,7 +165,9 @@ interface DataFlowOperator : BitwiseOperator {
 }
 
 class PropagationContext<O : DataFlowOperator>(val dataFlowContext: DataFlowContext<O>, var changed: Boolean) {
-    fun walkCfg(nodesInPostOrder: List<NodeIndex>) {
+    val graph = dataFlowContext.cfg.graph
+
+    fun walkCfg(nodesInPostOrder: List<CFGIndex>) {
         // walking in reverse post-order
         nodesInPostOrder.asReversed().forEach { node ->
             val (start, end) = dataFlowContext.computeIdRange(node)
@@ -175,13 +177,13 @@ class PropagationContext<O : DataFlowOperator>(val dataFlowContext: DataFlowCont
         }
     }
 
-    private fun propagateBitsIntoGraphSuccessorsOf(predBits: List<Int>, node: NodeIndex) =
-        dataFlowContext.cfg.graph.outgoingEdges(node).forEach { edge ->
-            propagateBitsIntoEntrySetFor(predBits, edge)
+    private fun propagateBitsIntoGraphSuccessorsOf(predBits: List<Int>, node: CFGIndex) =
+        graph.outgoingEdges(node).forEach {
+            propagateBitsIntoEntrySetFor(predBits, graph.edges[it.index])
         }
 
-    private fun propagateBitsIntoEntrySetFor(predBits: List<Int>, edge: EdgeIndex) {
-        val target = dataFlowContext.cfg.graph.edges[edge.index].target
+    private fun propagateBitsIntoEntrySetFor(predBits: List<Int>, edge: CFGEdge) {
+        val target = edge.target
         val (start, end) = dataFlowContext.computeIdRange(target)
         val onEntry = dataFlowContext.onEntry.subList(start, end)
         val changed = dataFlowContext.oper.bitwise(onEntry, predBits)
