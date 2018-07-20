@@ -57,15 +57,15 @@ class DataFlowContext<O : DataFlowOperator>(val analysisName: String,
     }
 
     fun addGen(element: RsElement, bit: Int) {
-        getCfgIndices(element).forEach { idx ->
-            val (start, end) = computeIdRange(idx)
+        getCfgIndices(element).forEach {
+            val (start, end) = computeIdRange(it)
             setBit(gens.subList(start, end), bit)
         }
     }
 
     fun addKill(kind: KillFrom, element: RsElement, bit: Int) {
-        getCfgIndices(element).forEach { idx ->
-            val (start, end) = computeIdRange(idx)
+        getCfgIndices(element).forEach {
+            val (start, end) = computeIdRange(it)
             when (kind) {
                 KillFrom.ScopeEnd -> setBit(scopeKills.subList(start, end), bit)
                 KillFrom.Execution -> setBit(actionKills.subList(start, end), bit)
