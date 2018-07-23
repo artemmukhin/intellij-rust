@@ -5,19 +5,87 @@
 
 package org.rust.lang.core.types.infer
 
+import com.intellij.psi.util.parentOfType
 import org.rust.lang.core.psi.*
+import org.rust.lang.core.psi.ext.RsElement
 import org.rust.lang.core.psi.ext.containerExpr
 import org.rust.lang.core.psi.ext.mutability
 import org.rust.lang.core.types.builtinDeref
-import org.rust.lang.core.types.infer.Adjustment.Deref
+import org.rust.lang.core.types.infer.BorrowKind.ImmutableBorrow
+import org.rust.lang.core.types.infer.BorrowKind.MutableBorrow
+import org.rust.lang.core.types.infer.Categorization.*
+import org.rust.lang.core.types.infer.ImmutabilityBlame.*
+import org.rust.lang.core.types.infer.InteriorKind.InteriorElement
+import org.rust.lang.core.types.infer.InteriorKind.InteriorField
+import org.rust.lang.core.types.infer.MutabilityCategory.Declared
+import org.rust.lang.core.types.infer.PointerKind.BorrowedPointer
+import org.rust.lang.core.types.infer.PointerKind.UnsafePointer
 import org.rust.lang.core.types.inference
 import org.rust.lang.core.types.isDereference
+import org.rust.lang.core.types.regions.ReStatic
+import org.rust.lang.core.types.regions.Region
 import org.rust.lang.core.types.ty.*
 import org.rust.lang.core.types.type
 import org.rust.stdext.nextOrNull
 
 
+/** [Categorization] is a subset of the full expression forms */
+sealed class Categorization {
+    /** Temporary value */
+    data class Rvalue(val region: Region) : Categorization()
+
+    /** Static value */
+    object StaticItem : Categorization()
+
+    /** Variable captured by closure */
+    object Upvar : Categorization()
+
+    /** Local variable */
+    data class Local(val element: RsElement) : Categorization()
+
+    /** Dereference of a pointer */
+    data class Deref(val cmt: Cmt, val pointerKind: PointerKind?) : Categorization()
+
+    /** Something reachable from the base without a pointer dereference (e.g. field) */
+    data class Interior(val cmt: Cmt, val interiorKind: InteriorKind) : Categorization()
+
+    /** Selects a particular enum variant (if enum has more than one variant */
+    data class Downcast(val cmt: Cmt, val element: RsElement) : Categorization()
+}
+
+sealed class BorrowKind {
+    object ImmutableBorrow : BorrowKind()
+    object MutableBorrow : BorrowKind()
+
+    companion object {
+        fun from(mutability: Mutability): BorrowKind =
+            when (mutability) {
+                Mutability.IMMUTABLE -> ImmutableBorrow
+                Mutability.MUTABLE -> MutableBorrow
+            }
+    }
+}
+
+sealed class PointerKind {
+    data class BorrowedPointer(val borrowKind: BorrowKind, val region: Region) : PointerKind()
+    data class UnsafePointer(val mutability: Mutability) : PointerKind()
+}
+
+sealed class InteriorKind {
+    object InteriorField : InteriorKind()
+    object InteriorElement : InteriorKind()
+}
+
+sealed class ImmutabilityBlame {
+    class ImmutableLocal(val element: RsElement) : ImmutabilityBlame()
+    object ClosureEnv : ImmutabilityBlame()
+    class LocalDeref(val element: RsElement) : ImmutabilityBlame()
+    object AdtFieldDeref : ImmutabilityBlame()
+}
+
+/** Mutability of the expression address */
 enum class MutabilityCategory {
+    /** Any immutable */
     Immutable,
     /** Directly declared as mutable */
     Declared,
@@ -25,37 +93,79 @@ enum class MutabilityCategory {
     Inherited;
 
     companion object {
-        fun valueOf(mutability: Mutability): MutabilityCategory =
+        fun from(mutability: Mutability): MutabilityCategory =
             when (mutability) {
-                Mutability.IMMUTABLE -> MutabilityCategory.Immutable
-                Mutability.MUTABLE -> MutabilityCategory.Declared
+                Mutability.IMMUTABLE -> Immutable
+                Mutability.MUTABLE -> Declared
+            }
+
+        fun from(borrowKind: BorrowKind): MutabilityCategory =
+            when (borrowKind) {
+                is ImmutableBorrow -> Immutable
+                is MutableBorrow -> Declared
+            }
+
+        fun from(pointerKind: PointerKind): MutabilityCategory =
+            when (pointerKind) {
+                is BorrowedPointer -> from(pointerKind.borrowKind)
+                is UnsafePointer -> from(pointerKind.mutability)
             }
     }
 
     fun inherit(): MutabilityCategory =
         when (this) {
-            MutabilityCategory.Immutable -> MutabilityCategory.Immutable
-            MutabilityCategory.Declared, MutabilityCategory.Inherited -> MutabilityCategory.Inherited
+            Immutable -> Immutable
+            Declared, Inherited -> Inherited
         }
 
     val isMutable: Boolean
         get() = when (this) {
-            MutabilityCategory.Immutable -> false
-            MutabilityCategory.Declared, MutabilityCategory.Inherited -> true
+            Immutable -> false
+            Declared, Inherited -> true
         }
 }
 
 /**
- * Category, MutabilityCategory, and Type
- * Currently supports only MutabilityCategory and Type
+ * [Cmt]: Category, MutabilityCategory, and Type
+ *
+ * Imagine a routine Address(Expr) that evaluates an expression and returns an
+ * address where the result is to be found.  If Expr is a place, then this
+ * is the address of the place.  If Expr is an rvalue, this is the address of
+ * some temporary spot in memory where the result is stored.
+ *
+ * [category]: kind of Expr
+ * [mutabilityCategory]: mutability of Address(Expr)
+ * [ty]: the type of data found at Address(Expr)
  */
-class Cmt(val ty: Ty, val mutabilityCategory: MutabilityCategory? = null)
+class Cmt(val category: Categorization? = null, val mutabilityCategory: MutabilityCategory? = null, val ty: Ty) {
+    val immutabilityBlame: ImmutabilityBlame? =
+        when (category) {
+            is Deref -> {
+                val pointerKind = category.pointerKind
+                val baseCmt = category.cmt
+                if (pointerKind is BorrowedPointer && pointerKind.borrowKind === ImmutableBorrow) {
+                    when (baseCmt.category) {
+                        is Local -> LocalDeref(baseCmt.category.element)
+                        is Interior -> AdtFieldDeref
+                        is Upvar -> ClosureEnv
+                        else -> null
+                    }
+                } else if (pointerKind is UnsafePointer) {
+                    null
+                } else {
+                    baseCmt.immutabilityBlame
+                }
+            }
+            is Local -> ImmutableLocal(category.element)
+            is Interior -> category.cmt.immutabilityBlame
+            is Downcast -> category.cmt.immutabilityBlame
+            else -> null
+        }
+}
 
 private fun processUnaryExpr(unaryExpr: RsUnaryExpr): Cmt {
-    val type = unaryExpr.type
-    if (!unaryExpr.isDereference) return Cmt(type)
-    val base = unaryExpr.expr ?: return Cmt(type)
-
+    if (!unaryExpr.isDereference) return processRvalue(unaryExpr)
+    val base = unaryExpr.expr ?: return Cmt(ty = unaryExpr.type)
     val baseCmt = processExpr(base)
     return processDeref(baseCmt)
 }
@@ -67,39 +177,46 @@ private fun processDotExpr(dotExpr: RsDotExpr): Cmt {
     val type = dotExpr.type
     val base = dotExpr.expr
     val baseCmt = processExpr(base)
-    return Cmt(type, baseCmt.mutabilityCategory?.inherit())
+    return Cmt(Interior(baseCmt, InteriorField), baseCmt.mutabilityCategory?.inherit(), type)
 }
 
 private fun processIndexExpr(indexExpr: RsIndexExpr): Cmt {
     val type = indexExpr.type
-    val base = indexExpr.containerExpr ?: return Cmt(type)
+    val base = indexExpr.containerExpr ?: return Cmt(ty = type)
     val baseCmt = processExpr(base)
-    return Cmt(type, baseCmt.mutabilityCategory?.inherit())
+    return Cmt(Interior(baseCmt, InteriorElement), baseCmt.mutabilityCategory?.inherit(), type)
 }
 
 private fun processPathExpr(pathExpr: RsPathExpr): Cmt {
+    fun isClosureParameter(declaration: RsElement): Boolean =
+        declaration.parentOfType<RsValueParameter>()?.parentOfType<RsLambdaExpr>() != null
+
     val type = pathExpr.type
-    val declaration = pathExpr.path.reference.resolve() ?: return Cmt(type)
-
+    val declaration = pathExpr.path.reference.resolve() ?: return Cmt(ty = type)
     return when (declaration) {
-        is RsConstant, is RsEnumVariant, is RsStructItem, is RsFunction -> Cmt(type, MutabilityCategory.Declared)
-
-        is RsPatBinding -> {
-            if (declaration.mutability.isMut) {
-                Cmt(type, MutabilityCategory.Declared)
+        is RsConstant -> {
+            if (declaration.static != null) {
+                Cmt(StaticItem, MutabilityCategory.from(declaration.mutability), type)
             } else {
-                Cmt(type, MutabilityCategory.Immutable)
+                processRvalue(pathExpr)
             }
         }
 
-        is RsSelfParameter -> Cmt(type, MutabilityCategory.valueOf(declaration.mutability))
+        is RsEnumVariant, is RsStructItem, is RsFunction -> processRvalue(pathExpr)
 
-        else -> Cmt(type)
+        is RsPatBinding -> {
+            val category = if (isClosureParameter(declaration)) Upvar else Local(declaration)
+            Cmt(category, MutabilityCategory.from(declaration.mutability), type)
+        }
+
+        is RsSelfParameter -> Cmt(Local(declaration), MutabilityCategory.from(declaration.mutability), type)
+
+        else -> Cmt(ty = type)
     }
 }
 
 private fun processParenExpr(parenExpr: RsParenExpr): Cmt =
-    Cmt(parenExpr.type, parenExpr.expr.mutabilityCategory)
+    processExpr(parenExpr.expr)
 
 private fun processExpr(expr: RsExpr): Cmt {
     val adjustments = expr.inference?.adjustments?.get(expr) ?: emptyList()
@@ -108,7 +225,7 @@ private fun processExpr(expr: RsExpr): Cmt {
 
 private fun processExprAdjustedWith(expr: RsExpr, adjustments: Iterator<Adjustment>): Cmt =
     when (adjustments.nextOrNull()) {
-        is Deref -> {
+        is Adjustment.Deref -> {
             // TODO: overloaded deref
             processDeref(processExprAdjustedWith(expr, adjustments))
         }
@@ -119,15 +236,17 @@ private fun processDeref(baseCmt: Cmt): Cmt {
     val baseType = baseCmt.ty
     val (derefType, derefMut) = baseType.builtinDeref() ?: Pair(TyUnknown, Mutability.DEFAULT_MUTABILITY)
 
-    return when (baseType) {
-        is TyReference -> Cmt(derefType, MutabilityCategory.valueOf(derefMut))
-        is TyPointer -> Cmt(derefType, MutabilityCategory.valueOf(derefMut))
-        else -> Cmt(derefType)
+    val pointerKind = when (baseType) {
+        is TyReference -> BorrowedPointer(BorrowKind.from(baseType.mutability), baseType.region)
+        is TyPointer -> UnsafePointer(baseType.mutability)
+        else -> UnsafePointer(derefMut)
     }
+
+    return Cmt(Deref(baseCmt, pointerKind), MutabilityCategory.from(pointerKind), derefType)
 }
 
 private fun processRvalue(expr: RsExpr): Cmt =
-    Cmt(expr.type, MutabilityCategory.Declared)
+    Cmt(Rvalue(ReStatic), Declared, expr.type)
 
 private fun processExprUnadjusted(expr: RsExpr): Cmt =
     when (expr) {
@@ -140,5 +259,8 @@ private fun processExprUnadjusted(expr: RsExpr): Cmt =
     }
 
 
+val RsExpr.cmt: Cmt?
+    get() = processExpr(this)
+
 val RsExpr.mutabilityCategory: MutabilityCategory?
-    get() = processExpr(this).mutabilityCategory
+    get() = cmt?.mutabilityCategory
