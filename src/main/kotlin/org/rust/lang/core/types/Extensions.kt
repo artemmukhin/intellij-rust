@@ -13,10 +13,9 @@ import com.intellij.psi.util.CachedValueProvider.Result
 import com.intellij.psi.util.CachedValuesManager
 import org.rust.lang.core.psi.*
 import org.rust.lang.core.psi.ext.*
-import org.rust.lang.core.types.infer.RsInferenceResult
-import org.rust.lang.core.types.infer.inferTypeReferenceType
-import org.rust.lang.core.types.infer.inferTypesIn
-import org.rust.lang.core.types.infer.mutabilityCategory
+import org.rust.lang.core.types.borrowck.BorrowCheckResult
+import org.rust.lang.core.types.borrowck.borrowck
+import org.rust.lang.core.types.infer.*
 import org.rust.lang.core.types.ty.*
 import org.rust.openapiext.recursionGuard
 
@@ -80,4 +79,42 @@ fun Ty.builtinDeref(explicit: Boolean = true): Pair<Ty, Mutability>? =
 
 val RsUnaryExpr.isDereference: Boolean get() = this.mul != null
 
-val RsExpr.isMutable: Boolean get() = mutabilityCategory?.isMutable ?: Mutability.DEFAULT_MUTABILITY.isMut
+private val MEMORY_CATEGORIZATION_KEY: Key<CachedValue<RsMemoryCategorizationResult>> =
+    Key.create("MEMORY_CATEGORIZATION_KEY")
+
+val RsInferenceContextOwner.memoryCategorization: RsMemoryCategorizationResult
+    get() = CachedValuesManager.getCachedValue(this, MEMORY_CATEGORIZATION_KEY) {
+        val categorization = computeCategorizationIn(this)
+        val project = project
+
+        if (this is RsModificationTrackerOwner) {
+            Result.create(categorization, project.rustStructureModificationTracker, modificationTracker)
+        } else {
+            Result.create(categorization, project.rustStructureModificationTracker)
+        }
+    }
+
+private val PsiElement.memoryCategorization: RsMemoryCategorizationResult?
+    get() = contextOrSelf<RsInferenceContextOwner>()?.memoryCategorization
+
+val RsExpr.cmt: Cmt?
+    get() = memoryCategorization?.get(this)
+
+val RsExpr.isMutable: Boolean
+    get() = cmt?.isMutable ?: Mutability.DEFAULT_MUTABILITY.isMut
+
+
+private val BORROW_CHECKER_KEY: Key<CachedValue<BorrowCheckResult>> =
+    Key.create("BORROW_CHECKER_KEY")
+
+val RsInferenceContextOwner.borrowCheckResult: BorrowCheckResult?
+    get() = CachedValuesManager.getCachedValue(this, BORROW_CHECKER_KEY) {
+        val borrowCheck = borrowck(this)
+        val project = project
+
+        if (this is RsModificationTrackerOwner) {
+            Result.create(borrowCheck, project.rustStructureModificationTracker, modificationTracker)
+        } else {
+            Result.create(borrowCheck, project.rustStructureModificationTracker)
+        }
+    }

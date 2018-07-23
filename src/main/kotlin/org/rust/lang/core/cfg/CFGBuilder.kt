@@ -171,7 +171,7 @@ class CFGBuilder(val graph: Graph<CFGNodeData, CFGEdgeData>, val entry: CFGNode,
         //     v 4   v 5          v 3   v 4
         //     [ifExpr]          [ifExpr]
         //
-        val conditionExit = process(ifExpr.condition?.expr, pred)
+        val conditionExit = process(ifExpr.condition, pred)
         val thenExit = process(ifExpr.block, conditionExit)
         val elseBranch = ifExpr.elseBranch
 
@@ -203,7 +203,7 @@ class CFGBuilder(val graph: Graph<CFGNodeData, CFGEdgeData>, val entry: CFGNode,
         val loopScope = LoopScope(whileExpr, loopBack, exprExit)
 
         withLoopScope(loopScope) {
-            val conditionExit = process(whileExpr.condition?.expr, loopBack)
+            val conditionExit = process(whileExpr.condition, loopBack)
             addContainedEdge(conditionExit, exprExit)
 
             val bodyExit = process(whileExpr.block, conditionExit)
@@ -237,6 +237,12 @@ class CFGBuilder(val graph: Graph<CFGNodeData, CFGEdgeData>, val entry: CFGNode,
         finishWith(exprExit)
     }
 
+    override fun visitCondition(condition: RsCondition) {
+        val initExit = process(condition.expr, pred)
+        val exit = process(condition.pat, initExit)
+        finishWithAstNode(condition, exit)
+    }
+
     override fun visitForExpr(forExpr: RsForExpr) {
         val loopBack = addDummyNode(pred)
         val exprExit = addAstNode(forExpr)
@@ -259,9 +265,13 @@ class CFGBuilder(val graph: Graph<CFGNodeData, CFGEdgeData>, val entry: CFGNode,
             val rightExit = process(binaryExpr.right, leftExit)
             finishWith { addAstNode(binaryExpr, leftExit, rightExit) }
         } else {
-            finishWith { straightLine(binaryExpr, pred, listOf(binaryExpr.left, binaryExpr.right)) }
+            val method = binaryExpr.binaryOp.reference.resolve()
+            if (method != null) {
+                finishWith { processCall(binaryExpr, binaryExpr.left, listOf(binaryExpr.right)) }
+            } else {
+                finishWith { straightLine(binaryExpr, pred, listOf(binaryExpr.left, binaryExpr.right)) }
+            }
         }
-        // TODO: method calls
     }
 
     override fun visitRetExpr(retExpr: RsRetExpr) {
