@@ -13,7 +13,9 @@ import com.intellij.psi.impl.source.PsiFileImpl
 import com.intellij.psi.tree.IElementType
 import com.intellij.psi.util.PsiTreeUtil
 import com.intellij.psi.util.PsiUtilCore
+import org.rust.lang.core.psi.RsBlock
 import org.rust.lang.core.psi.RsFile
+import org.rust.lang.core.psi.RsFunction
 import org.rust.lang.core.stubs.RsFileStub
 
 
@@ -111,3 +113,9 @@ fun RsElement.isAncestorOf(child: PsiElement): Boolean =
 
 val PsiElement.endOffsetInParent: Int
     get() = startOffsetInParent + textLength
+
+val PsiElement.bodyOwnedBy: RsBlock?
+    get() = when (this) {
+        is RsFunction -> this.block
+        else -> null
+    }

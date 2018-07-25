@@ -7,7 +7,9 @@ package org.rust.lang.core.types.borrowck
 
 import org.rust.lang.core.DataFlowContext
 import org.rust.lang.core.DataFlowOperator
+import org.rust.lang.core.psi.RsBlock
 import org.rust.lang.core.psi.ext.RsElement
+import org.rust.lang.core.psi.ext.bodyOwnedBy
 import org.rust.lang.core.types.borrowck.LoanPathElement.Interior
 import org.rust.lang.core.types.borrowck.LoanPathKind.Downcast
 import org.rust.lang.core.types.borrowck.LoanPathKind.Extend
@@ -16,6 +18,8 @@ import org.rust.lang.core.types.infer.InteriorKind
 import org.rust.lang.core.types.infer.MutabilityCategory
 import org.rust.lang.core.types.infer.PointerKind
 import org.rust.lang.core.types.regions.Scope
+import org.rust.lang.core.types.regions.ScopeTree
+import org.rust.lang.core.types.regions.getRegionScopeTree
 import org.rust.lang.core.types.ty.Ty
 
 class LoanDataFlowOperator : DataFlowOperator {
@@ -69,3 +73,29 @@ enum class LoanCause {
     MatchDiscriminant
 }
 
+class BorrowCheckResult(val usedMutNodes: MutableSet<RsElement>)
+
+class BorrowCheckContext(
+    val regionScopeTree: ScopeTree,
+    val owner: RsElement,
+    val body: RsBlock,
+    val usedMutNodes: MutableSet<RsElement> = mutableSetOf()
+)
+
+fun borrowck(owner: RsElement): BorrowCheckResult? {
+    val body = owner.bodyOwnedBy ?: return null
+    val regoionScopeTree = getRegionScopeTree(owner)
+    val borrowCheckContext = BorrowCheckContext(regoionScopeTree, owner, body)
+
+    val data = buildBorrowckDataflowData(borrowCheckContext, false, body)
+    if (data != null) {
+        checkLoans(borrowCheckContext, data.loans, data.moveData, data.allLoans, body)
+        // TODO: implement and call `unusedCheck(borrowCheckContext, body)`
+    }
+
+    return BorrowCheckResult(borrowCheckContext.usedMutNodes)
+}
+
+fun buildBorrowckDataflowData(context: BorrowCheckContext, forceAnalysis: Boolean, body: RsBlock): AnalysisData? {
+    return null
+}
