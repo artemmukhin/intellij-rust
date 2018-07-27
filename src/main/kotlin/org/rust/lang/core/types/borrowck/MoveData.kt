@@ -34,7 +34,10 @@ class MoveData(
 
     /** Assignments to a variable or path, like `x = foo`, but not `x += foo`. */
     val assigneeElements: MutableSet<RsElement>
-)
+) {
+    fun isEmpty(): Boolean =
+        moves.isEmpty() && pathAssignments.isEmpty() && varAssignments.isEmpty()
+}
 
 class FlowedMoveData(
     val moveData: MoveData,
@@ -68,12 +71,12 @@ enum class MoveKind {
     Captured    // Closure creation that moves a value
 }
 
-class MoveDataFlowOperator : DataFlowOperator {
+object MoveDataFlowOperator : DataFlowOperator {
     override fun join(succ: Int, pred: Int): Int = succ or pred     // moves from both preds are in scope
     override val initialValue: Boolean get() = false                // no loans in scope by default
 }
 
-class AssignDataFlowOperator : DataFlowOperator {
+object AssignDataFlowOperator : DataFlowOperator {
     override fun join(succ: Int, pred: Int): Int = succ or pred     // moves from both preds are in scope
     override val initialValue: Boolean get() = false                // no assignments in scope by default
 }

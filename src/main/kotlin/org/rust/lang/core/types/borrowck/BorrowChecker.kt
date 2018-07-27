@@ -5,14 +5,17 @@
 
 package org.rust.lang.core.types.borrowck
 
+import org.rust.lang.core.CFG
 import org.rust.lang.core.DataFlowContext
 import org.rust.lang.core.DataFlowOperator
+import org.rust.lang.core.KillFrom
 import org.rust.lang.core.psi.RsBlock
 import org.rust.lang.core.psi.ext.RsElement
 import org.rust.lang.core.psi.ext.bodyOwnedBy
 import org.rust.lang.core.types.borrowck.LoanPathElement.Interior
 import org.rust.lang.core.types.borrowck.LoanPathKind.Downcast
 import org.rust.lang.core.types.borrowck.LoanPathKind.Extend
+import org.rust.lang.core.types.borrowck.gatherLoans.gatherLoansInFn
 import org.rust.lang.core.types.infer.BorrowKind
 import org.rust.lang.core.types.infer.InteriorKind
 import org.rust.lang.core.types.infer.MutabilityCategory
@@ -22,7 +25,7 @@ import org.rust.lang.core.types.regions.ScopeTree
 import org.rust.lang.core.types.regions.getRegionScopeTree
 import org.rust.lang.core.types.ty.Ty
 
-class LoanDataFlowOperator : DataFlowOperator {
+object LoanDataFlowOperator : DataFlowOperator {
     override fun join(succ: Int, pred: Int): Int = succ or pred
     override val initialValue: Boolean = false
 }
@@ -97,5 +100,19 @@ fun borrowck(owner: RsElement): BorrowCheckResult? {
 }
 
 fun buildBorrowckDataflowData(context: BorrowCheckContext, forceAnalysis: Boolean, body: RsBlock): AnalysisData? {
+    val (allLoans, moveData) = gatherLoansInFn(context, body)
+    if (!forceAnalysis && allLoans.isEmpty() && moveData.isEmpty()) return null
+
+    val cfg = CFG(body)
+    val loanContext = DataFlowContext("borrowck", body, cfg, LoanDataFlowOperator, allLoans.size)
+
+    allLoans.forEachIndexed { loanIndex, loan ->
+        loanContext.addGen(loan.genScope.element, loanIndex)
+        loanContext.addKill(KillFrom.ScopeEnd, loan.killScope.element, loanIndex)
+    }
+    loanContext.addKillsFromFlowExits()
+    loanContext.propagate()
+
+    // TODOs
     return null
 }
