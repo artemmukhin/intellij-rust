@@ -21,6 +21,9 @@ class ScopeTree(
 ) {
     /** Returns the narrowest scope that encloses [scope], if any */
     fun getEnclosingScope(scope: Scope): Scope? = parentMap[scope]?.first
+
+    // TODO
+    // fun varScope(varElement: RsElement): Scope
 }
 
 fun getRegionScopeTree(element: RsElement): ScopeTree = ScopeTree()

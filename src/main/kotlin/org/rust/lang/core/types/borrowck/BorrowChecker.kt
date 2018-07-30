@@ -13,8 +13,7 @@ import org.rust.lang.core.psi.RsBlock
 import org.rust.lang.core.psi.ext.RsElement
 import org.rust.lang.core.psi.ext.bodyOwnedBy
 import org.rust.lang.core.types.borrowck.LoanPathElement.Interior
-import org.rust.lang.core.types.borrowck.LoanPathKind.Downcast
-import org.rust.lang.core.types.borrowck.LoanPathKind.Extend
+import org.rust.lang.core.types.borrowck.LoanPathKind.*
 import org.rust.lang.core.types.borrowck.gatherLoans.gatherLoansInFn
 import org.rust.lang.core.types.infer.BorrowKind
 import org.rust.lang.core.types.infer.InteriorKind
@@ -43,12 +42,21 @@ class Loan(val index: Int,
            val cause: LoanCause
 )
 
-class LoanPath(val kind: LoanPathKind, val ty: Ty) {
+data class LoanPath(val kind: LoanPathKind, val ty: Ty) {
     val hasDowncast: Boolean
         get() = when {
             kind is Downcast -> true
             kind is Extend && kind.loanPathElement is Interior -> kind.loanPath.hasDowncast
             else -> false
+        }
+
+    fun killScope(bccx: BorrowCheckContext): Scope =
+        when (kind) {
+            is Var -> bccx.regionScopeTree.varScope(kind.element)
+            is Upvar -> {
+            }
+            is Downcast -> kind.loanPath.killScope(bccx)
+            is Extend -> kind.loanPath.killScope(bccx)
         }
 }
 
@@ -112,6 +120,8 @@ fun buildBorrowckDataflowData(context: BorrowCheckContext, forceAnalysis: Boolea
     }
     loanContext.addKillsFromFlowExits()
     loanContext.propagate()
+
+    val flowedMoves = FlowedMoveData()
 
     // TODOs
     return null
