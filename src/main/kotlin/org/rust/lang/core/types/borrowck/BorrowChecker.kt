@@ -91,18 +91,6 @@ sealed class LoanPathElement {
     data class Interior(val element: RsElement?, val kind: InteriorKind) : LoanPathElement()
 }
 
-enum class LoanCause {
-    ClosureCapture,
-    AddrOf,
-    AutoRef,
-    AutoUnsafe,
-    RefBinding,
-    OverloadedOperator,
-    ClosureInvocation,
-    ForLoop,
-    MatchDiscriminant
-}
-
 class BorrowCheckResult(val usedMutNodes: MutableSet<RsElement>)
 
 class BorrowCheckContext(
