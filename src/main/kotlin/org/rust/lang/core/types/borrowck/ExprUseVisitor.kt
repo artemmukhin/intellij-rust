@@ -5,6 +5,7 @@
 
 package org.rust.lang.core.types.borrowck
 
+import org.jaxen.expr.LiteralExpr
 import org.rust.lang.core.psi.*
 import org.rust.lang.core.psi.ext.RsElement
 import org.rust.lang.core.psi.ext.containerExpr
@@ -14,6 +15,7 @@ import org.rust.lang.core.types.borrowck.ConsumeMode.Copy
 import org.rust.lang.core.types.borrowck.ConsumeMode.Move
 import org.rust.lang.core.types.borrowck.MoveReason.DirectRefMove
 import org.rust.lang.core.types.infer.BorrowKind
+import org.rust.lang.core.types.infer.BorrowKind.ImmutableBorrow
 import org.rust.lang.core.types.infer.Cmt
 import org.rust.lang.core.types.infer.MemoryCategorizationContext
 import org.rust.lang.core.types.regions.ReScope
@@ -114,7 +116,7 @@ class ExprUseVisitor(
             walkIrrefutablePat(parameterCmt, parameter.pat)
         }
 
-        consumeExpr(body)
+        body.expr?.let { consumeExpr(it) }
     }
 
     fun delegateConsume(element: RsElement, cmt: Cmt) {
@@ -174,16 +176,68 @@ class ExprUseVisitor(
             }
 
             is RsIndexExpr -> {
-                val containerExpr = expr.containerExpr ?: return
-                val indexExpr = expr.indexExpr ?: return
-                selectFromExpr(containerExpr)
-                consumeExpr(indexExpr)
+                expr.containerExpr?.let { selectFromExpr(it) }
+                expr.indexExpr?.let { consumeExpr(it) }
             }
 
             is RsCallExpr -> {
                 walkCalee(expr, expr.expr)
                 consumeExprs(expr.valueArgumentList.exprList)
             }
+
+            is RsStructLiteral -> {
+                walkStructExpr(expr.structLiteralBody.structLiteralFieldList)
+            }
+
+            is RsTupleExpr -> {
+                consumeExprs(expr.exprList)
+            }
+
+            is RsIfExpr -> {
+                expr.condition?.expr?.let { consumeExpr(it) }
+                expr.block?.expr?.let { walkExpr(it) }
+                expr.elseBranch?.block?.expr?.let { consumeExpr(it) }
+            }
+
+            is RsMatchExpr -> {
+                val discriminant = expr.expr ?: return
+                val discriminantCmt = mc.processExpr(discriminant)
+                val region = ReEmpty
+                borrowExpr(discriminant, region, ImmutableBorrow, LoanCause.MatchDiscriminant)
+
+                val arms = expr.matchBody?.matchArmList ?: return
+                for (arm in arms) {
+                    val mode = armMoveMode(discriminantCmt, arm).matchMode()
+                    walkArm(discriminantCmt, arm, mode)
+                }
+            }
+
+            is RsArrayExpr -> consumeExprs(expr.exprList)
+
+            is RsContExpr, is LiteralExpr -> {
+            }
+
+            is RsLoopExpr -> expr.block?.let { walkBlock(it) }
+
+            is RsWhileExpr -> {
+                expr.condition?.expr?.let { consumeExpr(it) }
+                expr.block?.let { walkBlock(it) }
+            }
+
+            is RsBinaryExpr -> {
+                // TODO: Assign expressions
+                consumeExpr(expr.left)
+                expr.right?.let { consumeExpr(it) }
+            }
+
+            is RsBlockExpr -> walkBlock(expr.block)
+
+        // TODO?
+            is RsBreakExpr -> expr.expr?.let { consumeExpr(it) }
+
+            is RsCastExpr -> consumeExpr(expr.expr)
+
+            is RsLambdaExpr -> walkCaptures(expr)
         }
     }
 }
