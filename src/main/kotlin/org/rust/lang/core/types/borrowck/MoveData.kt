@@ -17,30 +17,30 @@ import org.rust.lang.core.types.borrowck.LoanPathElement.Interior
 import org.rust.lang.core.types.borrowck.LoanPathKind.*
 
 class MoveData(
-    val paths: MutableList<MovePath>,
+    val paths: MutableList<MovePath> = mutableListOf(),
 
     /** Cache of loan path to move path index, for easy lookup. */
-    val pathMap: MutableMap<LoanPath, MovePathIndex>,
+    val pathMap: MutableMap<LoanPath, MovePathIndex> = mutableMapOf(),
 
     /** Each move or uninitialized variable gets an entry here. */
-    val moves: MutableList<Move>,
+    val moves: MutableList<Move> = mutableListOf(),
 
     /**
      * Assignments to a variable, like `x = foo`. These are assigned
      * bits for dataflow, since we must track them to ensure that
      * immutable variables are assigned at most once along each path.
      */
-    val varAssignments: MutableList<Assignment>,
+    val varAssignments: MutableList<Assignment> = mutableListOf(),
 
     /**
      * Assignments to a path, like `x.f = foo`. These are not
      * assigned dataflow bits, but we track them because they still
      * kill move bits.
      */
-    val pathAssignments: MutableList<Assignment>,
+    val pathAssignments: MutableList<Assignment> = mutableListOf(),
 
     /** Assignments to a variable or path, like `x = foo`, but not `x += foo`. */
-    val assigneeElements: MutableSet<RsElement>
+    val assigneeElements: MutableSet<RsElement> = mutableSetOf()
 ) {
     fun pathLoanPath(index: MovePathIndex): LoanPath =
         paths[index.index].loanPath.copy()

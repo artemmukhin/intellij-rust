@@ -113,19 +113,17 @@ class BorrowCheckContext(
 )
 
 fun borrowck(owner: RsElement): BorrowCheckResult? {
-    owner.children
     val body = owner.bodyOwnedBy ?: return null
     val regoionScopeTree = getRegionScopeTree(owner)
-    val borrowCheckContext = BorrowCheckContext(regoionScopeTree, owner, body)
-    owner.children
+    val bccx = BorrowCheckContext(regoionScopeTree, owner, body)
 
-    val data = buildBorrowckDataflowData(borrowCheckContext, false, body)
+    val data = buildBorrowckDataflowData(bccx, false, body)
     if (data != null) {
-        checkLoans(borrowCheckContext, data.loans, data.moveData, data.allLoans, body)
+        checkLoans(bccx, data.loans, data.moveData, data.allLoans, body)
         // TODO: implement and call `unusedCheck(borrowCheckContext, body)`
     }
 
-    return BorrowCheckResult(borrowCheckContext.usedMutNodes)
+    return BorrowCheckResult(bccx.usedMutNodes)
 }
 
 fun buildBorrowckDataflowData(bccx: BorrowCheckContext, forceAnalysis: Boolean, body: RsBlock): AnalysisData? {
