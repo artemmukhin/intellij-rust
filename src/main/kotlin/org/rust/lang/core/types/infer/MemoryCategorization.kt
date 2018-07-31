@@ -24,6 +24,7 @@ import org.rust.lang.core.types.inference
 import org.rust.lang.core.types.isDereference
 import org.rust.lang.core.types.regions.ReStatic
 import org.rust.lang.core.types.regions.Region
+import org.rust.lang.core.types.regions.ScopeTree
 import org.rust.lang.core.types.ty.*
 import org.rust.lang.core.types.type
 import org.rust.stdext.nextOrNull
@@ -163,104 +164,115 @@ class Cmt(val category: Categorization? = null, val mutabilityCategory: Mutabili
         }
 }
 
-private fun processUnaryExpr(unaryExpr: RsUnaryExpr): Cmt {
-    if (!unaryExpr.isDereference) return processRvalue(unaryExpr)
-    val base = unaryExpr.expr ?: return Cmt(ty = unaryExpr.type)
-    val baseCmt = processExpr(base)
-    return processDeref(baseCmt)
-}
-
-private fun processDotExpr(dotExpr: RsDotExpr): Cmt {
-    if (dotExpr.methodCall != null) {
-        return processRvalue(dotExpr)
+class MemoryCategorizationContext(
+    val regionScopeTree: ScopeTree? = null,
+    val infcx: RsInferenceContext? = null
+) {
+    fun processUnaryExpr(unaryExpr: RsUnaryExpr): Cmt {
+        if (!unaryExpr.isDereference) return processRvalue(unaryExpr)
+        val base = unaryExpr.expr ?: return Cmt(ty = unaryExpr.type)
+        val baseCmt = processExpr(base)
+        return processDeref(baseCmt)
     }
-    val type = dotExpr.type
-    val base = dotExpr.expr
-    val baseCmt = processExpr(base)
-    return Cmt(Interior(baseCmt, InteriorField), baseCmt.mutabilityCategory?.inherit(), type)
-}
 
-private fun processIndexExpr(indexExpr: RsIndexExpr): Cmt {
-    val type = indexExpr.type
-    val base = indexExpr.containerExpr ?: return Cmt(ty = type)
-    val baseCmt = processExpr(base)
-    return Cmt(Interior(baseCmt, InteriorElement), baseCmt.mutabilityCategory?.inherit(), type)
-}
+    fun processDotExpr(dotExpr: RsDotExpr): Cmt {
+        if (dotExpr.methodCall != null) {
+            return processRvalue(dotExpr)
+        }
+        val type = dotExpr.type
+        val base = dotExpr.expr
+        val baseCmt = processExpr(base)
+        return Cmt(Interior(baseCmt, InteriorField), baseCmt.mutabilityCategory?.inherit(), type)
+    }
 
-private fun processPathExpr(pathExpr: RsPathExpr): Cmt {
-    fun isClosureParameter(declaration: RsElement): Boolean =
-        declaration.parentOfType<RsValueParameter>()?.parentOfType<RsLambdaExpr>() != null
+    fun processIndexExpr(indexExpr: RsIndexExpr): Cmt {
+        val type = indexExpr.type
+        val base = indexExpr.containerExpr ?: return Cmt(ty = type)
+        val baseCmt = processExpr(base)
+        return Cmt(Interior(baseCmt, InteriorElement), baseCmt.mutabilityCategory?.inherit(), type)
+    }
 
-    val type = pathExpr.type
-    val declaration = pathExpr.path.reference.resolve() ?: return Cmt(ty = type)
-    return when (declaration) {
-        is RsConstant -> {
-            if (declaration.static != null) {
-                Cmt(StaticItem, MutabilityCategory.from(declaration.mutability), type)
-            } else {
-                processRvalue(pathExpr)
+    fun processPathExpr(pathExpr: RsPathExpr): Cmt {
+        fun isClosureParameter(declaration: RsElement): Boolean =
+            declaration.parentOfType<RsValueParameter>()?.parentOfType<RsLambdaExpr>() != null
+
+        val type = pathExpr.type
+        val declaration = pathExpr.path.reference.resolve() ?: return Cmt(ty = type)
+        return when (declaration) {
+            is RsConstant -> {
+                if (declaration.static != null) {
+                    Cmt(StaticItem, MutabilityCategory.from(declaration.mutability), type)
+                } else {
+                    processRvalue(pathExpr)
+                }
             }
+
+            is RsEnumVariant, is RsStructItem, is RsFunction -> processRvalue(pathExpr)
+
+            is RsPatBinding -> {
+                val category = if (isClosureParameter(declaration)) Upvar else Local(declaration)
+                Cmt(category, MutabilityCategory.from(declaration.mutability), type)
+            }
+
+            is RsSelfParameter -> Cmt(Local(declaration), MutabilityCategory.from(declaration.mutability), type)
+
+            else -> Cmt(ty = type)
+        }
+    }
+
+    fun processParenExpr(parenExpr: RsParenExpr): Cmt =
+        processExpr(parenExpr.expr)
+
+    fun processExpr(expr: RsExpr): Cmt {
+        val adjustments = expr.inference?.adjustments?.get(expr) ?: emptyList()
+        return processExprAdjustedWith(expr, adjustments.asReversed().iterator())
+    }
+
+    fun processExprAdjustedWith(expr: RsExpr, adjustments: Iterator<Adjustment>): Cmt =
+        when (adjustments.nextOrNull()) {
+            is Adjustment.Deref -> {
+                // TODO: overloaded deref
+                processDeref(processExprAdjustedWith(expr, adjustments))
+            }
+            else -> processExprUnadjusted(expr)
         }
 
-        is RsEnumVariant, is RsStructItem, is RsFunction -> processRvalue(pathExpr)
+    fun processDeref(baseCmt: Cmt): Cmt {
+        val baseType = baseCmt.ty
+        val (derefType, derefMut) = baseType.builtinDeref() ?: Pair(TyUnknown, Mutability.DEFAULT_MUTABILITY)
 
-        is RsPatBinding -> {
-            val category = if (isClosureParameter(declaration)) Upvar else Local(declaration)
-            Cmt(category, MutabilityCategory.from(declaration.mutability), type)
+        val pointerKind = when (baseType) {
+            is TyReference -> BorrowedPointer(BorrowKind.from(baseType.mutability), baseType.region)
+            is TyPointer -> UnsafePointer(baseType.mutability)
+            else -> UnsafePointer(derefMut)
         }
 
-        is RsSelfParameter -> Cmt(Local(declaration), MutabilityCategory.from(declaration.mutability), type)
-
-        else -> Cmt(ty = type)
+        return Cmt(Deref(baseCmt, pointerKind), MutabilityCategory.from(pointerKind), derefType)
     }
-}
 
-private fun processParenExpr(parenExpr: RsParenExpr): Cmt =
-    processExpr(parenExpr.expr)
+    fun processRvalue(expr: RsExpr): Cmt =
+        Cmt(Rvalue(ReStatic), Declared, expr.type)
 
-private fun processExpr(expr: RsExpr): Cmt {
-    val adjustments = expr.inference?.adjustments?.get(expr) ?: emptyList()
-    return processExprAdjustedWith(expr, adjustments.asReversed().iterator())
-}
+    fun processRvalue(element: RsElement, tempScope: Region, ty: Ty): Cmt =
+        Cmt(Rvalue(tempScope), Declared, ty)
 
-private fun processExprAdjustedWith(expr: RsExpr, adjustments: Iterator<Adjustment>): Cmt =
-    when (adjustments.nextOrNull()) {
-        is Adjustment.Deref -> {
-            // TODO: overloaded deref
-            processDeref(processExprAdjustedWith(expr, adjustments))
+    fun processExprUnadjusted(expr: RsExpr): Cmt =
+        when (expr) {
+            is RsUnaryExpr -> processUnaryExpr(expr)
+            is RsDotExpr -> processDotExpr(expr)
+            is RsIndexExpr -> processIndexExpr(expr)
+            is RsPathExpr -> processPathExpr(expr)
+            is RsParenExpr -> processParenExpr(expr)
+            else -> processRvalue(expr)
         }
-        else -> processExprUnadjusted(expr)
-    }
 
-private fun processDeref(baseCmt: Cmt): Cmt {
-    val baseType = baseCmt.ty
-    val (derefType, derefMut) = baseType.builtinDeref() ?: Pair(TyUnknown, Mutability.DEFAULT_MUTABILITY)
-
-    val pointerKind = when (baseType) {
-        is TyReference -> BorrowedPointer(BorrowKind.from(baseType.mutability), baseType.region)
-        is TyPointer -> UnsafePointer(baseType.mutability)
-        else -> UnsafePointer(derefMut)
-    }
-
-    return Cmt(Deref(baseCmt, pointerKind), MutabilityCategory.from(pointerKind), derefType)
+    fun isTypeMovesByDefault(ty: Ty): Boolean =
+        infcx?.lookup?.isCopy(ty)?.not() ?: true
 }
-
-private fun processRvalue(expr: RsExpr): Cmt =
-    Cmt(Rvalue(ReStatic), Declared, expr.type)
-
-private fun processExprUnadjusted(expr: RsExpr): Cmt =
-    when (expr) {
-        is RsUnaryExpr -> processUnaryExpr(expr)
-        is RsDotExpr -> processDotExpr(expr)
-        is RsIndexExpr -> processIndexExpr(expr)
-        is RsPathExpr -> processPathExpr(expr)
-        is RsParenExpr -> processParenExpr(expr)
-        else -> processRvalue(expr)
-    }
 
 
 val RsExpr.cmt: Cmt?
-    get() = processExpr(this)
+    get() = MemoryCategorizationContext().processExpr(this)
 
 val RsExpr.mutabilityCategory: MutabilityCategory?
     get() = cmt?.mutabilityCategory

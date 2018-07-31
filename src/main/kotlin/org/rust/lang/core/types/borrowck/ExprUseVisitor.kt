@@ -5,11 +5,21 @@
 
 package org.rust.lang.core.types.borrowck
 
-import org.rust.lang.core.psi.RsPat
+import org.rust.lang.core.psi.*
 import org.rust.lang.core.psi.ext.RsElement
+import org.rust.lang.core.psi.ext.containerExpr
+import org.rust.lang.core.psi.ext.indexExpr
+import org.rust.lang.core.psi.ext.valueParameters
+import org.rust.lang.core.types.borrowck.ConsumeMode.Copy
+import org.rust.lang.core.types.borrowck.ConsumeMode.Move
+import org.rust.lang.core.types.borrowck.MoveReason.DirectRefMove
 import org.rust.lang.core.types.infer.BorrowKind
 import org.rust.lang.core.types.infer.Cmt
+import org.rust.lang.core.types.infer.MemoryCategorizationContext
+import org.rust.lang.core.types.regions.ReScope
 import org.rust.lang.core.types.regions.Region
+import org.rust.lang.core.types.regions.Scope
+import org.rust.lang.core.types.type
 
 interface Delegate {
     /** The value found at `cmt` is either copied or moved, depending on mode. */
@@ -91,4 +101,92 @@ enum class MutateMode {
 class ExprUseVisitor(
     val mc: MemoryCategorizationContext,
     val delegate: Delegate
-)
+) {
+    fun consumeBody(body: RsBlock) {
+        val function = body.parent as? RsFunction ?: return
+
+        for (parameter in function.valueParameters) {
+            val parameterType = parameter.typeReference?.type ?: continue
+
+            val bodyScopeRegion = ReScope(Scope.createNode(body))
+            val parameterCmt = mc.processRvalue(parameter, bodyScopeRegion, parameterType)
+
+            walkIrrefutablePat(parameterCmt, parameter.pat)
+        }
+
+        consumeExpr(body)
+    }
+
+    fun delegateConsume(element: RsElement, cmt: Cmt) {
+        val mode = copyOrMove(mc, cmt, DirectRefMove)
+        delegate.consume(element, cmt, mode)
+    }
+
+    fun consumeExprs(exprs: List<RsExpr>) =
+        exprs.forEach { consumeExpr(it) }
+
+    fun consumeExpr(expr: RsExpr) {
+        val cmt = mc.processExpr(expr)
+        delegateConsume(expr, cmt)
+    }
+
+    fun mutateExpr(assignmentExpr: RsExpr, expr: RsExpr, mode: MutateMode) {
+        val cmt = mc.processExpr(expr)
+        delegate.mutate(assignmentExpr, cmt, mode)
+        walkExpr(expr)
+    }
+
+    fun borrowExpr(expr: RsExpr, region: Region, borrowKind: BorrowKind, cause: LoanCause) {
+        val cmt = mc.processExpr(expr)
+        delegate.borrow(expr, cmt, region, borrowKind, cause)
+        walkExpr(expr)
+    }
+
+    fun selectFromExpr(expr: RsExpr) =
+        walkExpr(expr)
+
+    fun walkExpr(expr: RsExpr) {
+        walkAdjustment(expr)
+
+        when (expr) {
+            is RsPathExpr -> {
+            }
+
+            is RsUnaryExpr -> {
+                val base = expr.expr ?: return
+                if (expr.mul != null) {
+                    selectFromExpr(base)
+                } else {
+                    consumeExpr(base)
+                }
+            }
+
+            is RsDotExpr -> {
+                val base = expr.expr
+                val fieldLookup = expr.fieldLookup
+                val methodCall = expr.methodCall
+
+                if (fieldLookup != null) {
+                    selectFromExpr(base)
+                } else if (methodCall != null) {
+                    consumeExprs(methodCall.valueArgumentList.exprList)
+                }
+            }
+
+            is RsIndexExpr -> {
+                val containerExpr = expr.containerExpr ?: return
+                val indexExpr = expr.indexExpr ?: return
+                selectFromExpr(containerExpr)
+                consumeExpr(indexExpr)
+            }
+
+            is RsCallExpr -> {
+                walkCalee(expr, expr.expr)
+                consumeExprs(expr.valueArgumentList.exprList)
+            }
+        }
+    }
+}
+
+fun copyOrMove(mc: MemoryCategorizationContext, cmt: Cmt, moveReason: MoveReason): ConsumeMode =
+    if (mc.isTypeMovesByDefault(cmt.ty)) Move(moveReason) else Copy
