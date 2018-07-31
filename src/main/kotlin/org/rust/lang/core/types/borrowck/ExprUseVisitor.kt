@@ -5,7 +5,6 @@
 
 package org.rust.lang.core.types.borrowck
 
-import org.jaxen.expr.LiteralExpr
 import org.rust.lang.core.psi.*
 import org.rust.lang.core.psi.ext.RsElement
 import org.rust.lang.core.psi.ext.containerExpr
@@ -21,6 +20,7 @@ import org.rust.lang.core.types.infer.MemoryCategorizationContext
 import org.rust.lang.core.types.regions.ReScope
 import org.rust.lang.core.types.regions.Region
 import org.rust.lang.core.types.regions.Scope
+import org.rust.lang.core.types.ty.TyFunction
 import org.rust.lang.core.types.type
 
 interface Delegate {
@@ -151,9 +151,6 @@ class ExprUseVisitor(
         walkAdjustment(expr)
 
         when (expr) {
-            is RsPathExpr -> {
-            }
-
             is RsUnaryExpr -> {
                 val base = expr.expr ?: return
                 if (expr.mul != null) {
@@ -181,7 +178,7 @@ class ExprUseVisitor(
             }
 
             is RsCallExpr -> {
-                walkCalee(expr, expr.expr)
+                walkCallee(expr, expr.expr)
                 consumeExprs(expr.valueArgumentList.exprList)
             }
 
@@ -214,9 +211,6 @@ class ExprUseVisitor(
 
             is RsArrayExpr -> consumeExprs(expr.exprList)
 
-            is RsContExpr, is LiteralExpr -> {
-            }
-
             is RsLoopExpr -> expr.block?.let { walkBlock(it) }
 
             is RsWhileExpr -> {
@@ -239,6 +233,43 @@ class ExprUseVisitor(
 
             is RsLambdaExpr -> walkCaptures(expr)
         }
+    }
+
+    fun walkCallee(call: RsExpr, callee: RsExpr) {
+        val calleeType = callee.type
+        when (calleeType) {
+            is TyFunction -> consumeExpr(callee)
+            else -> {
+            } // TODO?
+        }
+    }
+
+    fun walkStmt(stmt: RsStmt) {
+        when (stmt) {
+            is RsLetDecl -> walkLet(stmt)
+            is RsExprStmt -> consumeExpr(stmt.expr)
+        }
+    }
+
+    fun walkLet(declaration: RsLetDecl) {
+        val init = declaration.expr
+        val pat = declaration.pat ?: return
+        if (init != null) {
+            walkExpr(init)
+            val initCmt = mc.processExpr(init)
+            walkIrrefutablePat(initCmt, declaration.pat)
+        } else {
+            // TODO
+        }
+    }
+
+    fun walkBlock(block: RsBlock) {
+        block.stmtList.forEach { walkStmt(it) }
+        block.expr?.let { consumeExpr(it) }
+    }
+
+    fun walkStructExpr(fields: List<RsStructLiteralField>) {
+        fields.mapNotNull { it.expr }.forEach { consumeExpr(it) }
     }
 }
 
