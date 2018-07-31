@@ -5,13 +5,14 @@
 
 package org.rust.lang.core.types.borrowck
 
-import org.rust.lang.core.CFG
+import org.rust.lang.core.ControlFlowGraph
 import org.rust.lang.core.DataFlowContext
 import org.rust.lang.core.DataFlowOperator
 import org.rust.lang.core.KillFrom
 import org.rust.lang.core.psi.RsBlock
 import org.rust.lang.core.psi.ext.RsElement
 import org.rust.lang.core.psi.ext.bodyOwnedBy
+import org.rust.lang.core.types.borrowck.LoanPathElement.Deref
 import org.rust.lang.core.types.borrowck.LoanPathElement.Interior
 import org.rust.lang.core.types.borrowck.LoanPathKind.*
 import org.rust.lang.core.types.borrowck.gatherLoans.gatherLoansInFn
@@ -31,7 +32,7 @@ object LoanDataFlowOperator : DataFlowOperator {
 
 typealias LoanDataFlow = DataFlowContext<LoanDataFlowOperator>
 
-class AnalysisData(val allLoans: MutableList<Loan>, val loans: LoanDataFlow, val moveData: FlowedMoveData)
+class AnalysisData(val allLoans: List<Loan>, val loans: LoanDataFlow, val moveData: FlowedMoveData)
 
 class Loan(val index: Int,
            val loanPath: LoanPath,
@@ -46,30 +47,48 @@ data class LoanPath(val kind: LoanPathKind, val ty: Ty) {
     val hasDowncast: Boolean
         get() = when {
             kind is Downcast -> true
-            kind is Extend && kind.loanPathElement is Interior -> kind.loanPath.hasDowncast
+            kind is Extend && kind.lpElement is Interior -> kind.loanPath.hasDowncast
             else -> false
         }
 
     fun killScope(bccx: BorrowCheckContext): Scope =
         when (kind) {
-            is Var -> bccx.regionScopeTree.varScope(kind.element)
-            is Upvar -> {
-            }
+            is Var -> bccx.regionScopeTree.getVariableScope(kind.element)
+            is Upvar -> throw NotImplementedError() // TODO
             is Downcast -> kind.loanPath.killScope(bccx)
             is Extend -> kind.loanPath.killScope(bccx)
         }
+
+    fun hasFork(other: LoanPath): Boolean {
+        val thisKind = this.kind
+        val otherKind = other.kind
+        return when {
+            thisKind is Extend && otherKind is Extend && thisKind.lpElement is Interior && otherKind.lpElement is Interior ->
+                if (thisKind.lpElement == otherKind.lpElement) {
+                    thisKind.loanPath.hasFork(otherKind.loanPath)
+                } else {
+                    true
+                }
+
+            thisKind is Extend && thisKind.lpElement is Deref -> thisKind.loanPath.hasFork(other)
+
+            otherKind is Extend && otherKind.lpElement is Deref -> this.hasFork(otherKind.loanPath)
+
+            else -> false
+        }
+    }
 }
 
 sealed class LoanPathKind {
     class Var(val element: RsElement) : LoanPathKind()
     class Upvar : LoanPathKind()
     class Downcast(val loanPath: LoanPath, val element: RsElement) : LoanPathKind()
-    class Extend(val loanPath: LoanPath, val mutCategory: MutabilityCategory, val loanPathElement: LoanPathElement) : LoanPathKind()
+    class Extend(val loanPath: LoanPath, val mutCategory: MutabilityCategory, val lpElement: LoanPathElement) : LoanPathKind()
 }
 
 sealed class LoanPathElement {
-    class Deref(kind: PointerKind) : LoanPathElement()
-    class Interior(element: RsElement?, kind: InteriorKind) : LoanPathElement()
+    data class Deref(val kind: PointerKind) : LoanPathElement()
+    data class Interior(val element: RsElement?, val kind: InteriorKind) : LoanPathElement()
 }
 
 enum class LoanCause {
@@ -94,9 +113,11 @@ class BorrowCheckContext(
 )
 
 fun borrowck(owner: RsElement): BorrowCheckResult? {
+    owner.children
     val body = owner.bodyOwnedBy ?: return null
     val regoionScopeTree = getRegionScopeTree(owner)
     val borrowCheckContext = BorrowCheckContext(regoionScopeTree, owner, body)
+    owner.children
 
     val data = buildBorrowckDataflowData(borrowCheckContext, false, body)
     if (data != null) {
@@ -107,22 +128,20 @@ fun borrowck(owner: RsElement): BorrowCheckResult? {
     return BorrowCheckResult(borrowCheckContext.usedMutNodes)
 }
 
-fun buildBorrowckDataflowData(context: BorrowCheckContext, forceAnalysis: Boolean, body: RsBlock): AnalysisData? {
-    val (allLoans, moveData) = gatherLoansInFn(context, body)
+fun buildBorrowckDataflowData(bccx: BorrowCheckContext, forceAnalysis: Boolean, body: RsBlock): AnalysisData? {
+    val (allLoans, moveData) = gatherLoansInFn(bccx, body)
     if (!forceAnalysis && allLoans.isEmpty() && moveData.isEmpty()) return null
 
-    val cfg = CFG(body)
-    val loanContext = DataFlowContext("borrowck", body, cfg, LoanDataFlowOperator, allLoans.size)
+    val cfg = ControlFlowGraph(body)
+    val loanDfcx = DataFlowContext("borrowck", body, cfg, LoanDataFlowOperator, allLoans.size)
 
-    allLoans.forEachIndexed { loanIndex, loan ->
-        loanContext.addGen(loan.genScope.element, loanIndex)
-        loanContext.addKill(KillFrom.ScopeEnd, loan.killScope.element, loanIndex)
+    allLoans.forEachIndexed { i, loan ->
+        loanDfcx.addGen(loan.genScope.element, i)
+        loanDfcx.addKill(KillFrom.ScopeEnd, loan.killScope.element, i)
     }
-    loanContext.addKillsFromFlowExits()
-    loanContext.propagate()
+    loanDfcx.addKillsFromFlowExits()
+    loanDfcx.propagate()
 
-    val flowedMoves = FlowedMoveData()
-
-    // TODOs
-    return null
+    val flowedMoves = FlowedMoveData(moveData, bccx, cfg, body)
+    return AnalysisData(allLoans, loanDfcx, flowedMoves)
 }

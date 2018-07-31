@@ -10,4 +10,4 @@ import org.rust.lang.core.types.borrowck.BorrowCheckContext
 import org.rust.lang.core.types.borrowck.Loan
 import org.rust.lang.core.types.borrowck.MoveData
 
-fun gatherLoansInFn(context: BorrowCheckContext, body: RsBlock): Pair<List<Loan>, MoveData> {}
+fun gatherLoansInFn(bccx: BorrowCheckContext, body: RsBlock): Pair<List<Loan>, MoveData> {}

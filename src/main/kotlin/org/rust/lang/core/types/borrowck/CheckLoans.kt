@@ -7,5 +7,5 @@ package org.rust.lang.core.types.borrowck
 
 import org.rust.lang.core.psi.RsBlock
 
-fun checkLoans(context: BorrowCheckContext, dataFlowLoans: LoanDataFlow, moveData: FlowedMoveData, allLoans: List<Loan>, body: RsBlock) {
+fun checkLoans(bccx: BorrowCheckContext, dataFlowLoans: LoanDataFlow, moveData: FlowedMoveData, allLoans: List<Loan>, body: RsBlock) {
 }

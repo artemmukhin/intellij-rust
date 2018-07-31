@@ -17,13 +17,13 @@ typealias ScopeDepth = Int
 typealias ScopeInfo = Pair<Scope, ScopeDepth>
 
 class ScopeTree(
-    private val parentMap: MutableMap<Scope, ScopeInfo> = mutableMapOf()
+    private val parentMap: MutableMap<Scope, ScopeInfo> = mutableMapOf(),
+    private val variableMap: MutableMap<RsElement, Scope> = mutableMapOf()
 ) {
     /** Returns the narrowest scope that encloses [scope], if any */
     fun getEnclosingScope(scope: Scope): Scope? = parentMap[scope]?.first
 
-    // TODO
-    // fun varScope(varElement: RsElement): Scope
+    fun getVariableScope(variable: RsElement): Scope = checkNotNull(variableMap[variable])
 }
 
 fun getRegionScopeTree(element: RsElement): ScopeTree = ScopeTree()

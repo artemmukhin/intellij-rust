@@ -5,7 +5,7 @@
 
 package org.rust.lang.core.types.borrowck
 
-import org.rust.lang.core.CFG
+import org.rust.lang.core.ControlFlowGraph
 import org.rust.lang.core.DataFlowContext
 import org.rust.lang.core.DataFlowOperator
 import org.rust.lang.core.KillFrom
@@ -99,7 +99,7 @@ class MoveData(
     }
 }
 
-class FlowedMoveData(moveData: MoveData, bccx: BorrowCheckContext, cfg: CFG, body: RsBlock) {
+class FlowedMoveData(moveData: MoveData, bccx: BorrowCheckContext, cfg: ControlFlowGraph, body: RsBlock) {
     val moveData: MoveData
     val dataFlowMoves: MoveDataFlow
     val dataFlowAssign: AssignDataFlow
@@ -172,6 +172,6 @@ class Assignment(
 val LoanPath.isPrecise: Boolean
     get() = when (kind) {
         is Var, is Upvar -> true
-        is Extend -> if (kind.loanPathElement is Interior) false else kind.loanPath.isPrecise
+        is Extend -> if (kind.lpElement is Interior) false else kind.loanPath.isPrecise
         is Downcast -> kind.loanPath.isPrecise
     }
