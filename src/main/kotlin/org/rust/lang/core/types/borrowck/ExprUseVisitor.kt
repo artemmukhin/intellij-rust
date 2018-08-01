@@ -111,8 +111,8 @@ enum class MutateMode {
 }
 
 class ExprUseVisitor(
-    val mc: MemoryCategorizationContext,
-    val delegate: Delegate
+    val delegate: Delegate,
+    val mc: MemoryCategorizationContext
 ) {
     fun consumeBody(body: RsBlock) {
         val function = body.parent as? RsFunction ?: return
