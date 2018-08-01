@@ -85,3 +85,21 @@ fun checkAliasability(bccx: BorrowCheckContext, cause: LoanCause, cmt: Cmt, requ
 
     return true
 }
+
+fun checkMutability(
+    bccx: BorrowCheckContext,
+    cause: AliasableViolationKind,
+    cmt: Cmt,
+    requiredKind: BorrowKind
+): Boolean =
+    if (requiredKind is ImmutableBorrow || cmt.isMutable) {
+        true
+    } else {
+        bccx.report()
+        false
+    }
+
+sealed class AliasableViolationKind {
+    object MutabilityViolation : AliasableViolationKind()
+    class BorrowViolation(val cause: LoanCause) : AliasableViolationKind()
+}
