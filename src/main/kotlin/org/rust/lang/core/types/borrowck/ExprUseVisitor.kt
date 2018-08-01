@@ -18,6 +18,7 @@ import org.rust.lang.core.types.infer.BorrowKind.ImmutableBorrow
 import org.rust.lang.core.types.infer.Cmt
 import org.rust.lang.core.types.infer.MemoryCategorizationContext
 import org.rust.lang.core.types.inference
+import org.rust.lang.core.types.regions.ReEmpty
 import org.rust.lang.core.types.regions.ReScope
 import org.rust.lang.core.types.regions.Region
 import org.rust.lang.core.types.regions.Scope
@@ -96,12 +97,11 @@ sealed class TrackMatchMode {
     object Conflicting : TrackMatchMode()
 
     val matchMode: MatchMode
-        get() =
-            when (this) {
-                is Unknown -> MatchMode.NonBindingMatch
-                is Definite -> mode
-                is Conflicting -> MatchMode.MovingMatch
-            }
+        get() = when (this) {
+            is Unknown -> MatchMode.NonBindingMatch
+            is Definite -> mode
+            is Conflicting -> MatchMode.MovingMatch
+        }
 }
 
 enum class MutateMode {
