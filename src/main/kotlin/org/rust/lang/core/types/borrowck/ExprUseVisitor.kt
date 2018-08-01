@@ -17,9 +17,11 @@ import org.rust.lang.core.types.infer.BorrowKind
 import org.rust.lang.core.types.infer.BorrowKind.ImmutableBorrow
 import org.rust.lang.core.types.infer.Cmt
 import org.rust.lang.core.types.infer.MemoryCategorizationContext
+import org.rust.lang.core.types.inference
 import org.rust.lang.core.types.regions.ReScope
 import org.rust.lang.core.types.regions.Region
 import org.rust.lang.core.types.regions.Scope
+import org.rust.lang.core.types.ty.TyAdt
 import org.rust.lang.core.types.ty.TyFunction
 import org.rust.lang.core.types.type
 
@@ -90,8 +92,16 @@ enum class MatchMode {
 
 sealed class TrackMatchMode {
     object Unknown : TrackMatchMode()
-    class Definite(mode: MatchMode) : TrackMatchMode()
+    class Definite(val mode: MatchMode) : TrackMatchMode()
     object Conflicting : TrackMatchMode()
+
+    val matchMode: MatchMode
+        get() =
+            when (this) {
+                is Unknown -> MatchMode.NonBindingMatch
+                is Definite -> mode
+                is Conflicting -> MatchMode.MovingMatch
+            }
 }
 
 enum class MutateMode {
@@ -109,11 +119,12 @@ class ExprUseVisitor(
 
         for (parameter in function.valueParameters) {
             val parameterType = parameter.typeReference?.type ?: continue
+            val parameterPat = parameter.pat ?: continue
 
             val bodyScopeRegion = ReScope(Scope.createNode(body))
             val parameterCmt = mc.processRvalue(parameter, bodyScopeRegion, parameterType)
 
-            walkIrrefutablePat(parameterCmt, parameter.pat)
+            walkIrrefutablePat(parameterCmt, parameterPat)
         }
 
         body.expr?.let { consumeExpr(it) }
@@ -183,7 +194,7 @@ class ExprUseVisitor(
             }
 
             is RsStructLiteral -> {
-                walkStructExpr(expr.structLiteralBody.structLiteralFieldList)
+                walkStructExpr(expr.structLiteralBody.structLiteralFieldList, expr.structLiteralBody.expr)
             }
 
             is RsTupleExpr -> {
@@ -204,7 +215,7 @@ class ExprUseVisitor(
 
                 val arms = expr.matchBody?.matchArmList ?: return
                 for (arm in arms) {
-                    val mode = armMoveMode(discriminantCmt, arm).matchMode()
+                    val mode = armMoveMode(discriminantCmt, arm).matchMode
                     walkArm(discriminantCmt, arm, mode)
                 }
             }
@@ -257,9 +268,9 @@ class ExprUseVisitor(
         if (init != null) {
             walkExpr(init)
             val initCmt = mc.processExpr(init)
-            walkIrrefutablePat(initCmt, declaration.pat)
+            walkIrrefutablePat(initCmt, pat)
         } else {
-            // TODO
+            // TODO: walk over all bindings
         }
     }
 
@@ -268,8 +279,55 @@ class ExprUseVisitor(
         block.expr?.let { consumeExpr(it) }
     }
 
-    fun walkStructExpr(fields: List<RsStructLiteralField>) {
+    fun walkStructExpr(fields: List<RsStructLiteralField>, withExpr: RsExpr?) {
         fields.mapNotNull { it.expr }.forEach { consumeExpr(it) }
+
+        if (withExpr != null) {
+            val withCmt = mc.processExpr(withExpr)
+            val withType = withCmt.ty
+            if (withType is TyAdt) {
+                // TODO
+            }
+            walkExpr(withExpr)
+        }
+    }
+
+    fun walkAdjustment(expr: RsExpr) {
+        val adjustments = expr.inference?.adjustments?.get(expr) ?: emptyList()
+        val cmt = mc.processExprUnadjusted(expr)
+        for (adjustment in adjustments) {
+            // TODO: overloaded deref support needed
+        }
+    }
+
+    fun armMoveMode(discriminantCmt: Cmt, arm: RsMatchArm): TrackMatchMode {
+        var mode: TrackMatchMode = TrackMatchMode.Unknown
+        arm.patList.forEach { pat -> mode = determinePatMoveMode(discriminantCmt, pat, mode) }
+        return mode
+    }
+
+    fun walkArm(discriminantCmt: Cmt, arm: RsMatchArm, mode: MatchMode) {
+        arm.patList.forEach { walkPat(discriminantCmt, it, mode) }
+        arm.matchArmGuard?.let { consumeExpr(it.expr) }
+        arm.expr?.let { consumeExpr(it) }
+    }
+
+    fun walkIrrefutablePat(discriminantCmt: Cmt, pat: RsPat) {
+        val mode = determinePatMoveMode(discriminantCmt, pat, TrackMatchMode.Unknown)
+        walkPat(discriminantCmt, pat, mode.matchMode)
+    }
+
+    // TODO: mc.cat_pattern needed
+    fun determinePatMoveMode(discriminantCmt: Cmt, pat: RsPat, mode: TrackMatchMode): TrackMatchMode {
+        return TrackMatchMode.Unknown
+    }
+
+    // TODO: mc.cat_pattern needed
+    fun walkPat(discriminantCmt: Cmt, pat: RsPat, matchMode: MatchMode) {
+    }
+
+    // TODO: closures support needed
+    fun walkCaptures(closureExpr: RsExpr) {
     }
 }
 
