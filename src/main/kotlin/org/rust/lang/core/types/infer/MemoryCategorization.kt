@@ -11,6 +11,9 @@ import org.rust.lang.core.psi.ext.RsElement
 import org.rust.lang.core.psi.ext.containerExpr
 import org.rust.lang.core.psi.ext.mutability
 import org.rust.lang.core.types.builtinDeref
+import org.rust.lang.core.types.infer.Aliasability.FreelyAliasable
+import org.rust.lang.core.types.infer.Aliasability.NonAliasable
+import org.rust.lang.core.types.infer.AliasableReason.*
 import org.rust.lang.core.types.infer.BorrowKind.ImmutableBorrow
 import org.rust.lang.core.types.infer.BorrowKind.MutableBorrow
 import org.rust.lang.core.types.infer.Categorization.*
@@ -45,7 +48,7 @@ sealed class Categorization {
     data class Local(val element: RsElement) : Categorization()
 
     /** Dereference of a pointer */
-    data class Deref(val cmt: Cmt, val pointerKind: PointerKind?) : Categorization()
+    data class Deref(val cmt: Cmt, val pointerKind: PointerKind) : Categorization()
 
     /** Something reachable from the base without a pointer dereference (e.g. field) */
     data class Interior(val cmt: Cmt, val interiorKind: InteriorKind) : Categorization()
@@ -83,6 +86,19 @@ sealed class ImmutabilityBlame {
     class LocalDeref(val element: RsElement) : ImmutabilityBlame()
     object AdtFieldDeref : ImmutabilityBlame()
 }
+
+sealed class Aliasability {
+    class FreelyAliasable(val reason: AliasableReason) : Aliasability()
+    object NonAliasable : Aliasability()
+    class ImmutableUnique(val aliasability: Aliasability) : Aliasability()
+}
+
+enum class AliasableReason {
+    AliasableBorrowed,
+    AliasableStatic,
+    AliasableStaticMut
+}
+
 
 /** Mutability of the expression address */
 enum class MutabilityCategory {
@@ -161,6 +177,21 @@ class Cmt(val category: Categorization? = null, val mutabilityCategory: Mutabili
             is Interior -> category.cmt.immutabilityBlame
             is Downcast -> category.cmt.immutabilityBlame
             else -> null
+        }
+
+    val isMutable: Boolean get() = mutabilityCategory?.isMutable ?: Mutability.DEFAULT_MUTABILITY.isMut
+
+    val aliasability: Aliasability
+        get() = when {
+            category is Deref && category.pointerKind is BorrowedPointer ->
+                when (category.pointerKind.borrowKind) {
+                    is MutableBorrow -> category.cmt.aliasability
+                    is ImmutableBorrow -> FreelyAliasable(AliasableBorrowed)
+                }
+            category is StaticItem -> FreelyAliasable(if (isMutable) AliasableStaticMut else AliasableStatic)
+            category is Interior -> category.cmt.aliasability
+            category is Downcast -> category.cmt.aliasability
+            else -> NonAliasable
         }
 }
 

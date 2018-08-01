@@ -9,7 +9,13 @@ import org.rust.lang.core.psi.RsBlock
 import org.rust.lang.core.psi.RsPat
 import org.rust.lang.core.psi.ext.RsElement
 import org.rust.lang.core.types.borrowck.*
+import org.rust.lang.core.types.infer.Aliasability.FreelyAliasable
+import org.rust.lang.core.types.infer.Aliasability.NonAliasable
+import org.rust.lang.core.types.infer.AliasableReason.AliasableStatic
+import org.rust.lang.core.types.infer.AliasableReason.AliasableStaticMut
 import org.rust.lang.core.types.infer.BorrowKind
+import org.rust.lang.core.types.infer.BorrowKind.ImmutableBorrow
+import org.rust.lang.core.types.infer.BorrowKind.MutableBorrow
 import org.rust.lang.core.types.infer.Cmt
 import org.rust.lang.core.types.infer.MemoryCategorizationContext
 import org.rust.lang.core.types.regions.Region
@@ -52,4 +58,30 @@ class GatherLoanContext(
     override fun mutate(assignmentElement: RsElement, assigneeCmt: Cmt, mode: MutateMode) {
         guaranteeAssignmentValid(assignmentElement, assigneeCmt, mode)
     }
+}
+
+fun checkAliasability(bccx: BorrowCheckContext, cause: LoanCause, cmt: Cmt, requiredKind: BorrowKind): Boolean {
+    val aliasability = cmt.aliasability
+
+    // Uniquely accessible path -- OK for `&` and `&mut`
+    if (aliasability is NonAliasable) {
+        return true
+    }
+
+    // Borrow of an immutable static item.
+    if (aliasability is FreelyAliasable && aliasability.reason == AliasableStatic && requiredKind is ImmutableBorrow) {
+        return true
+    }
+
+    // Even touching a static mut is considered unsafe. We assume the user knows what they're doing in these cases.
+    if (aliasability is FreelyAliasable && aliasability.reason == AliasableStaticMut) {
+        return true
+    }
+
+    if (aliasability is FreelyAliasable && requiredKind is MutableBorrow) {
+        bccx.reportAliasabilityViolation(cause, aliasability.reason, cmt)
+        return false
+    }
+
+    return true
 }
