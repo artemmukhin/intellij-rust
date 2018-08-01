@@ -28,7 +28,7 @@ import org.rust.lang.core.types.type
 
 interface Delegate {
     /** The value found at `cmt` is either copied or moved, depending on mode. */
-    fun consume(consumeElement: RsElement, cmt: Cmt, mode: ConsumeMode)
+    fun consume(element: RsElement, cmt: Cmt, mode: ConsumeMode)
 
     /**
      * The value found at `cmt` has been determined to match the
@@ -49,9 +49,9 @@ interface Delegate {
 
     /**
      * The value found at `borrow` is being borrowed at the point `element`
-     * for the region `loanRegion` with kind `borrowKind`.
+     * for the region `loanRegion` with kind `kind`.
      */
-    fun borrow(element: RsElement, cmt: Cmt, loanRegion: Region, borrowKind: BorrowKind, loancause: LoanCause)
+    fun borrow(element: RsElement, cmt: Cmt, loanRegion: Region, kind: BorrowKind, cause: LoanCause)
 
     /** The local variable `element` is declared but not initialized. */
     fun declarationWithoutInit(element: RsElement)
@@ -75,7 +75,7 @@ enum class LoanCause {
 
 sealed class ConsumeMode {
     object Copy : ConsumeMode()                     // reference to `x` where `x` has a type that copies
-    class Move(reason: MoveReason) : ConsumeMode()   // reference to `x` where x has a type that moves
+    class Move(val reason: MoveReason) : ConsumeMode()   // reference to `x` where x has a type that moves
 }
 
 enum class MoveReason {
