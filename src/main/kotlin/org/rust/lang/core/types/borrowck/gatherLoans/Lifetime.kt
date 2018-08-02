@@ -10,6 +10,10 @@ import org.rust.lang.core.types.borrowck.BorrowCheckContext
 import org.rust.lang.core.types.borrowck.LoanCause
 import org.rust.lang.core.types.infer.Categorization.*
 import org.rust.lang.core.types.infer.Cmt
+import org.rust.lang.core.types.infer.PointerKind.BorrowedPointer
+import org.rust.lang.core.types.infer.PointerKind.UnsafePointer
+import org.rust.lang.core.types.regions.ReScope
+import org.rust.lang.core.types.regions.ReStatic
 import org.rust.lang.core.types.regions.Region
 import org.rust.lang.core.types.regions.Scope
 
@@ -43,7 +47,27 @@ class GuaranteeLifetimeContext(
     fun checkScope(maxScope: Region): Boolean =
         !bccx.isSubregionOf(loanRegion, maxScope)
 
+    /**
+     * Returns the maximal region scope for the which the place [cmt] is guaranteed
+     * to be valid without any rooting etc, and presuming [cmt] is not mutated.
+     */
     fun scope(cmt: Cmt): Region {
-
+        val category = cmt.category
+        return when (category) {
+            is Rvalue -> category.region
+            is StaticItem -> ReStatic
+            is Upvar -> ReScope(itemScope)
+            is Local -> ReScope(bccx.regionScopeTree.getVariableScope(category.element))
+            is Deref -> {
+                val pointerKind = category.pointerKind
+                when (pointerKind) {
+                    is UnsafePointer -> ReStatic
+                    is BorrowedPointer -> pointerKind.region
+                }
+            }
+            is Interior -> scope(category.cmt)
+            is Downcast -> scope(category.cmt)
+            null -> ReStatic
+        }
     }
 }
