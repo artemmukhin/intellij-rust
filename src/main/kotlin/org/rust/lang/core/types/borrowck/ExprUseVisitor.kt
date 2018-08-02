@@ -6,10 +6,7 @@
 package org.rust.lang.core.types.borrowck
 
 import org.rust.lang.core.psi.*
-import org.rust.lang.core.psi.ext.RsElement
-import org.rust.lang.core.psi.ext.containerExpr
-import org.rust.lang.core.psi.ext.indexExpr
-import org.rust.lang.core.psi.ext.valueParameters
+import org.rust.lang.core.psi.ext.*
 import org.rust.lang.core.types.borrowck.ConsumeMode.Copy
 import org.rust.lang.core.types.borrowck.ConsumeMode.Move
 import org.rust.lang.core.types.borrowck.MoveReason.DirectRefMove
@@ -270,7 +267,7 @@ class ExprUseVisitor(
             val initCmt = mc.processExpr(init)
             walkIrrefutablePat(initCmt, pat)
         } else {
-            // TODO: walk over all bindings
+            pat.descendantsOfType<RsPatBinding>().forEach { delegate.declarationWithoutInit(it) }
         }
     }
 
