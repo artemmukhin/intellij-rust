@@ -17,9 +17,8 @@ import org.rust.lang.core.types.borrowck.LoanPathElement.Interior
 import org.rust.lang.core.types.borrowck.LoanPathKind.*
 import org.rust.lang.core.types.borrowck.gatherLoans.gatherLoansInFn
 import org.rust.lang.core.types.infer.*
-import org.rust.lang.core.types.regions.Scope
-import org.rust.lang.core.types.regions.ScopeTree
-import org.rust.lang.core.types.regions.getRegionScopeTree
+import org.rust.lang.core.types.infer.outlives.FreeRegionMap
+import org.rust.lang.core.types.regions.*
 import org.rust.lang.core.types.ty.Ty
 
 object LoanDataFlowOperator : DataFlowOperator {
@@ -95,7 +94,13 @@ class BorrowCheckContext(
     val owner: RsElement,
     val body: RsBlock,
     val usedMutNodes: MutableSet<RsElement> = mutableSetOf()
-)
+) {
+    fun isSubregionOf(sub: Region, sup: Region): Boolean {
+        val freeRegions = FreeRegionMap() // TODO
+        val regionRelations = RegionRelations(owner, regionScopeTree, freeRegions)
+        return regionRelations.isSubRegionOf(sub, sup)
+    }
+}
 
 fun borrowck(owner: RsElement): BorrowCheckResult? {
     val body = owner.bodyOwnedBy ?: return null

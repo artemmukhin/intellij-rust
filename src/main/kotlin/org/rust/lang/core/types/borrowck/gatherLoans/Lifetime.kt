@@ -40,5 +40,10 @@ class GuaranteeLifetimeContext(
             null -> true
         }
 
+    fun checkScope(maxScope: Region): Boolean =
+        !bccx.isSubregionOf(loanRegion, maxScope)
 
+    fun scope(cmt: Cmt): Region {
+
+    }
 }

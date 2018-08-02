@@ -6,7 +6,6 @@
 package org.rust.lang.core.types.regions
 
 import org.rust.lang.core.psi.ext.RsElement
-import org.rust.lang.core.types.infer.RsInferenceContext
 import org.rust.lang.core.types.infer.outlives.FreeRegionMap
 
 /**
@@ -21,7 +20,7 @@ data class ReFree(val element: RsElement, val boundRegion: BoundRegion) : Region
  * relationships between free regions) to yield a complete relation between concrete regions.
  */
 data class RegionRelations(
-    val inferenceContext: RsInferenceContext,
+    // val inferenceContext: RsInferenceContext,
 
     // context used to fetch the region maps
     val context: RsElement,

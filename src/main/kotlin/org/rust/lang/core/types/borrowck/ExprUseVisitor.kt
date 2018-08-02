@@ -74,7 +74,7 @@ enum class LoanCause {
 }
 
 sealed class ConsumeMode {
-    object Copy : ConsumeMode()                     // reference to `x` where `x` has a type that copies
+    object Copy : ConsumeMode()                          // reference to `x` where `x` has a type that copies
     class Move(val reason: MoveReason) : ConsumeMode()   // reference to `x` where x has a type that moves
 }
 
