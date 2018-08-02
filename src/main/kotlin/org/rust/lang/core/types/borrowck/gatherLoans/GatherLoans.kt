@@ -9,6 +9,7 @@ import org.rust.lang.core.psi.RsBlock
 import org.rust.lang.core.psi.RsPat
 import org.rust.lang.core.psi.ext.RsElement
 import org.rust.lang.core.types.borrowck.*
+import org.rust.lang.core.types.borrowck.gatherLoans.AliasableViolationKind.MutabilityViolation
 import org.rust.lang.core.types.infer.Aliasability.FreelyAliasable
 import org.rust.lang.core.types.infer.Aliasability.NonAliasable
 import org.rust.lang.core.types.infer.AliasableReason.AliasableStatic
@@ -16,6 +17,7 @@ import org.rust.lang.core.types.infer.AliasableReason.AliasableStaticMut
 import org.rust.lang.core.types.infer.BorrowKind
 import org.rust.lang.core.types.infer.BorrowKind.ImmutableBorrow
 import org.rust.lang.core.types.infer.BorrowKind.MutableBorrow
+import org.rust.lang.core.types.infer.Categorization
 import org.rust.lang.core.types.infer.Cmt
 import org.rust.lang.core.types.infer.MemoryCategorizationContext
 import org.rust.lang.core.types.regions.Region
@@ -60,11 +62,30 @@ class GatherLoanContext(
     }
 
     fun guaranteeAssignmentValid(assignment: RsElement, cmt: Cmt, mode: MutateMode) {
+        val loanPath = loanPathIsField(cmt).first
 
+        /** Only re-assignments to locals require it to be mutable - this is checked in [checkLoans] */
+        if (cmt.category !is Categorization.Local && !checkMutability(bccx, MutabilityViolation, cmt, MutableBorrow)) {
+            return
+        }
+
+        if (!checkAliasability(bccx, MutabilityViolation, cmt, MutableBorrow)) {
+            return
+        }
+
+        // `loanPath` may be null with e.g. `*foo() = 5`.
+        // In such cases, there is no need to check for conflicts with moves etc, just ignore.
+        if (loanPath != null) {
+            /** Only re-assignments to locals require it to be mutable - this is checked in [checkLoans] */
+            if (cmt.category !is Categorization.Local) {
+                markLoanPathAsMutated(loanPath)
+            }
+            gatherAssignment(bccx, moveData, assignment, loanPath, cmt.element, mode)
+        }
     }
 }
 
-fun checkAliasability(bccx: BorrowCheckContext, cause: LoanCause, cmt: Cmt, requiredKind: BorrowKind): Boolean {
+fun checkAliasability(bccx: BorrowCheckContext, cause: AliasableViolationKind, cmt: Cmt, requiredKind: BorrowKind): Boolean {
     val aliasability = cmt.aliasability
 
     // Uniquely accessible path -- OK for `&` and `&mut`
