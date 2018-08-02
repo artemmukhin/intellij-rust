@@ -146,7 +146,7 @@ fun checkMutability(
     if (requiredKind is ImmutableBorrow || cmt.isMutable) {
         true
     } else {
-        bccx.report()
+        bccx.report(BorrowCheckError(cause, cmt, BorrowCheckErrorCode.Mutability))
         false
     }
 

@@ -15,6 +15,7 @@ import org.rust.lang.core.psi.ext.bodyOwnedBy
 import org.rust.lang.core.types.borrowck.LoanPathElement.Deref
 import org.rust.lang.core.types.borrowck.LoanPathElement.Interior
 import org.rust.lang.core.types.borrowck.LoanPathKind.*
+import org.rust.lang.core.types.borrowck.gatherLoans.AliasableViolationKind
 import org.rust.lang.core.types.borrowck.gatherLoans.gatherLoansInFn
 import org.rust.lang.core.types.infer.*
 import org.rust.lang.core.types.infer.outlives.FreeRegionMap
@@ -100,6 +101,10 @@ class BorrowCheckContext(
         val regionRelations = RegionRelations(owner, regionScopeTree, freeRegions)
         return regionRelations.isSubRegionOf(sub, sup)
     }
+
+    fun report(error: BorrowCheckError) {
+        // TODO
+    }
 }
 
 fun borrowck(owner: RsElement): BorrowCheckResult? {
@@ -177,3 +182,15 @@ fun loanPathIsField(cmt: Cmt): Pair<LoanPath?, Boolean> {
         null -> Pair(null, false)
     }
 }
+
+sealed class BorrowCheckErrorCode {
+    object Mutability : BorrowCheckErrorCode()
+    class OutOfScope(val superScope: Region, val subScope: Region, val loanCause: LoanCause) : BorrowCheckErrorCode()
+    class BorrowedPointerTooShort(val loanRegion: Region, val pointerRegion: Region) : BorrowCheckErrorCode()
+}
+
+class BorrowCheckError(
+    val cause: AliasableViolationKind,
+    val cmt: Cmt,
+    val code: BorrowCheckErrorCode
+)

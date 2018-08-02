@@ -7,7 +7,10 @@ package org.rust.lang.core.types.borrowck.gatherLoans
 
 import org.rust.lang.core.psi.ext.RsElement
 import org.rust.lang.core.types.borrowck.BorrowCheckContext
+import org.rust.lang.core.types.borrowck.BorrowCheckError
+import org.rust.lang.core.types.borrowck.BorrowCheckErrorCode
 import org.rust.lang.core.types.borrowck.LoanCause
+import org.rust.lang.core.types.borrowck.gatherLoans.AliasableViolationKind.BorrowViolation
 import org.rust.lang.core.types.infer.Categorization.*
 import org.rust.lang.core.types.infer.Cmt
 import org.rust.lang.core.types.infer.PointerKind.BorrowedPointer
@@ -69,5 +72,9 @@ class GuaranteeLifetimeContext(
             is Downcast -> scope(category.cmt)
             null -> ReStatic
         }
+    }
+
+    fun reportError(code: BorrowCheckErrorCode) {
+        bccx.report(BorrowCheckError(BorrowViolation(cause), cmt, code))
     }
 }
