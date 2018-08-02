@@ -58,6 +58,10 @@ class GatherLoanContext(
     override fun mutate(assignmentElement: RsElement, assigneeCmt: Cmt, mode: MutateMode) {
         guaranteeAssignmentValid(assignmentElement, assigneeCmt, mode)
     }
+
+    fun guaranteeAssignmentValid(assignment: RsElement, cmt: Cmt, mode: MutateMode) {
+
+    }
 }
 
 fun checkAliasability(bccx: BorrowCheckContext, cause: LoanCause, cmt: Cmt, requiredKind: BorrowKind): Boolean {
@@ -98,6 +102,7 @@ fun checkMutability(
         bccx.report()
         false
     }
+
 
 sealed class AliasableViolationKind {
     object MutabilityViolation : AliasableViolationKind()

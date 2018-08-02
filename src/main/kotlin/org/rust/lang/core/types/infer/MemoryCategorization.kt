@@ -154,7 +154,12 @@ enum class MutabilityCategory {
  * [mutabilityCategory]: mutability of Address(Expr)
  * [ty]: the type of data found at Address(Expr)
  */
-class Cmt(val category: Categorization? = null, val mutabilityCategory: MutabilityCategory? = null, val ty: Ty) {
+class Cmt(
+    val element: RsElement,
+    val category: Categorization? = null,
+    val mutabilityCategory: MutabilityCategory = MutabilityCategory.from(Mutability.DEFAULT_MUTABILITY),
+    val ty: Ty
+) {
     val immutabilityBlame: ImmutabilityBlame? =
         when (category) {
             is Deref -> {
@@ -179,7 +184,7 @@ class Cmt(val category: Categorization? = null, val mutabilityCategory: Mutabili
             else -> null
         }
 
-    val isMutable: Boolean get() = mutabilityCategory?.isMutable ?: Mutability.DEFAULT_MUTABILITY.isMut
+    val isMutable: Boolean get() = mutabilityCategory.isMutable
 
     val aliasability: Aliasability
         get() = when {
@@ -201,9 +206,9 @@ class MemoryCategorizationContext(
 ) {
     fun processUnaryExpr(unaryExpr: RsUnaryExpr): Cmt {
         if (!unaryExpr.isDereference) return processRvalue(unaryExpr)
-        val base = unaryExpr.expr ?: return Cmt(ty = unaryExpr.type)
+        val base = unaryExpr.expr ?: return Cmt(unaryExpr, ty = unaryExpr.type)
         val baseCmt = processExpr(base)
-        return processDeref(baseCmt)
+        return processDeref(unaryExpr, baseCmt)
     }
 
     fun processDotExpr(dotExpr: RsDotExpr): Cmt {
@@ -213,14 +218,14 @@ class MemoryCategorizationContext(
         val type = dotExpr.type
         val base = dotExpr.expr
         val baseCmt = processExpr(base)
-        return Cmt(Interior(baseCmt, InteriorField), baseCmt.mutabilityCategory?.inherit(), type)
+        return Cmt(dotExpr, Interior(baseCmt, InteriorField), baseCmt.mutabilityCategory.inherit(), type)
     }
 
     fun processIndexExpr(indexExpr: RsIndexExpr): Cmt {
         val type = indexExpr.type
-        val base = indexExpr.containerExpr ?: return Cmt(ty = type)
+        val base = indexExpr.containerExpr ?: return Cmt(indexExpr, ty = type)
         val baseCmt = processExpr(base)
-        return Cmt(Interior(baseCmt, InteriorElement), baseCmt.mutabilityCategory?.inherit(), type)
+        return Cmt(indexExpr, Interior(baseCmt, InteriorElement), baseCmt.mutabilityCategory.inherit(), type)
     }
 
     fun processPathExpr(pathExpr: RsPathExpr): Cmt {
@@ -228,11 +233,11 @@ class MemoryCategorizationContext(
             declaration.parentOfType<RsValueParameter>()?.parentOfType<RsLambdaExpr>() != null
 
         val type = pathExpr.type
-        val declaration = pathExpr.path.reference.resolve() ?: return Cmt(ty = type)
+        val declaration = pathExpr.path.reference.resolve() ?: return Cmt(pathExpr, ty = type)
         return when (declaration) {
             is RsConstant -> {
                 if (declaration.static != null) {
-                    Cmt(StaticItem, MutabilityCategory.from(declaration.mutability), type)
+                    Cmt(pathExpr, StaticItem, MutabilityCategory.from(declaration.mutability), type)
                 } else {
                     processRvalue(pathExpr)
                 }
@@ -242,12 +247,12 @@ class MemoryCategorizationContext(
 
             is RsPatBinding -> {
                 val category = if (isClosureParameter(declaration)) Upvar else Local(declaration)
-                Cmt(category, MutabilityCategory.from(declaration.mutability), type)
+                Cmt(pathExpr, category, MutabilityCategory.from(declaration.mutability), type)
             }
 
-            is RsSelfParameter -> Cmt(Local(declaration), MutabilityCategory.from(declaration.mutability), type)
+            is RsSelfParameter -> Cmt(pathExpr, Local(declaration), MutabilityCategory.from(declaration.mutability), type)
 
-            else -> Cmt(ty = type)
+            else -> Cmt(pathExpr, ty = type)
         }
     }
 
@@ -263,12 +268,12 @@ class MemoryCategorizationContext(
         when (adjustments.nextOrNull()) {
             is Adjustment.Deref -> {
                 // TODO: overloaded deref
-                processDeref(processExprAdjustedWith(expr, adjustments))
+                processDeref(expr, processExprAdjustedWith(expr, adjustments))
             }
             else -> processExprUnadjusted(expr)
         }
 
-    fun processDeref(baseCmt: Cmt): Cmt {
+    fun processDeref(expr: RsExpr, baseCmt: Cmt): Cmt {
         val baseType = baseCmt.ty
         val (derefType, derefMut) = baseType.builtinDeref() ?: Pair(TyUnknown, Mutability.DEFAULT_MUTABILITY)
 
@@ -278,14 +283,14 @@ class MemoryCategorizationContext(
             else -> UnsafePointer(derefMut)
         }
 
-        return Cmt(Deref(baseCmt, pointerKind), MutabilityCategory.from(pointerKind), derefType)
+        return Cmt(expr, Deref(baseCmt, pointerKind), MutabilityCategory.from(pointerKind), derefType)
     }
 
     fun processRvalue(expr: RsExpr): Cmt =
-        Cmt(Rvalue(ReStatic), Declared, expr.type)
+        Cmt(expr, Rvalue(ReStatic), Declared, expr.type)
 
     fun processRvalue(element: RsElement, tempScope: Region, ty: Ty): Cmt =
-        Cmt(Rvalue(tempScope), Declared, ty)
+        Cmt(element, Rvalue(tempScope), Declared, ty)
 
     fun processExprUnadjusted(expr: RsExpr): Cmt =
         when (expr) {

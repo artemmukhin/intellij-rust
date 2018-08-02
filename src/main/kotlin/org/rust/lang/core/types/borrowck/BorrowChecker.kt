@@ -16,10 +16,7 @@ import org.rust.lang.core.types.borrowck.LoanPathElement.Deref
 import org.rust.lang.core.types.borrowck.LoanPathElement.Interior
 import org.rust.lang.core.types.borrowck.LoanPathKind.*
 import org.rust.lang.core.types.borrowck.gatherLoans.gatherLoansInFn
-import org.rust.lang.core.types.infer.BorrowKind
-import org.rust.lang.core.types.infer.InteriorKind
-import org.rust.lang.core.types.infer.MutabilityCategory
-import org.rust.lang.core.types.infer.PointerKind
+import org.rust.lang.core.types.infer.*
 import org.rust.lang.core.types.regions.Scope
 import org.rust.lang.core.types.regions.ScopeTree
 import org.rust.lang.core.types.regions.getRegionScopeTree
@@ -130,4 +127,48 @@ fun buildBorrowckDataflowData(bccx: BorrowCheckContext, forceAnalysis: Boolean, 
 
     val flowedMoves = FlowedMoveData(moveData, bccx, cfg, body)
     return AnalysisData(allLoans, loanDfcx, flowedMoves)
+}
+
+fun loanPathIsField(cmt: Cmt): Pair<LoanPath?, Boolean> {
+    fun createLoanPath(kind: LoanPathKind): LoanPath = LoanPath(kind, cmt.ty)
+
+    val category = cmt.category
+    return when (category) {
+        is Categorization.Rvalue, Categorization.StaticItem -> Pair(null, false)
+
+        is Categorization.Upvar -> Pair(createLoanPath(Upvar()), false)
+
+        is Categorization.Local -> Pair(createLoanPath(Var(cmt.element)), false)
+
+        is Categorization.Deref -> {
+            val (baseLp, baseIsField) = loanPathIsField(category.cmt)
+            if (baseLp != null) {
+                val kind = Extend(baseLp, cmt.mutabilityCategory, Deref(category.pointerKind))
+                Pair(createLoanPath(kind), baseIsField)
+            } else {
+                Pair(null, baseIsField)
+            }
+        }
+
+        is Categorization.Interior -> {
+            val baseCmt = category.cmt
+            val baseLp = loanPathIsField(baseCmt).first ?: return Pair(null, true)
+            val optVariantId = if (baseCmt.category is Categorization.Downcast) baseCmt.element else null
+            val kind = Extend(baseLp, cmt.mutabilityCategory, Interior(optVariantId, category.interiorKind))
+            Pair(createLoanPath(kind), true)
+        }
+
+        is Categorization.Downcast -> {
+            val baseCmt = category.cmt
+            val (baseLp, baseIsField) = loanPathIsField(baseCmt)
+            if (baseLp != null) {
+                val kind = Downcast(baseLp, category.element)
+                Pair(createLoanPath(kind), baseIsField)
+            } else {
+                Pair(null, baseIsField)
+            }
+        }
+
+        null -> Pair(null, false)
+    }
 }
