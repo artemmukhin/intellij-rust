@@ -119,3 +119,16 @@ val PsiElement.bodyOwnedBy: RsBlock?
         is RsFunction -> this.block
         else -> null
     }
+
+val RsElement.enclosingBlockOrSelf: RsBlock?
+    get() = this as? RsBlock ?: this.stubAncestorStrict()
+
+fun RsElement.getStartOffsetIn(target: RsElement): Int? {
+    var startOffset = 0
+    var current = this
+    while (current !== target) {
+        startOffset += current.startOffsetInParent
+        current = current.stubAncestorStrict() ?: return null
+    }
+    return startOffset
+}
