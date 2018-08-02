@@ -9,6 +9,7 @@ import org.rust.lang.core.psi.RsBlock
 import org.rust.lang.core.psi.RsPat
 import org.rust.lang.core.psi.ext.RsElement
 import org.rust.lang.core.types.borrowck.*
+import org.rust.lang.core.types.borrowck.gatherLoans.AliasableViolationKind.BorrowViolation
 import org.rust.lang.core.types.borrowck.gatherLoans.AliasableViolationKind.MutabilityViolation
 import org.rust.lang.core.types.infer.Aliasability.FreelyAliasable
 import org.rust.lang.core.types.infer.Aliasability.NonAliasable
@@ -20,6 +21,7 @@ import org.rust.lang.core.types.infer.BorrowKind.MutableBorrow
 import org.rust.lang.core.types.infer.Categorization
 import org.rust.lang.core.types.infer.Cmt
 import org.rust.lang.core.types.infer.MemoryCategorizationContext
+import org.rust.lang.core.types.regions.ReEmpty
 import org.rust.lang.core.types.regions.Region
 import org.rust.lang.core.types.regions.Scope
 
@@ -61,6 +63,7 @@ class GatherLoanContext(
         guaranteeAssignmentValid(assignmentElement, assigneeCmt, mode)
     }
 
+    /** Guarantees that [cmt] is assignable, or reports an error. */
     fun guaranteeAssignmentValid(assignment: RsElement, cmt: Cmt, mode: MutateMode) {
         val loanPath = loanPathIsField(cmt).first
 
@@ -82,6 +85,29 @@ class GatherLoanContext(
             }
             gatherAssignment(bccx, moveData, assignment, loanPath, cmt.element, mode)
         }
+    }
+
+    /**
+     * Guarantees that Address([cmt]) will be valid for the duration of `static_scope_r`, or reports an error.
+     * This may entail taking out loans, which will be added to the [req_loan_map]
+     */
+    fun guaranteeValid(element: RsElement, cmt: Cmt, requiredKind: BorrowKind, loanRegion: Region, cause: LoanCause) {
+        // A loan for the empty region can never be dereferenced, so it is always safe
+        if (loanRegion is ReEmpty) return
+
+        // Check that the lifetime of the borrow does not exceed the lifetime of the data being borrowed
+        if (!guaranteeLifetime(bccx, itemUpperBound, cause, cmt, loanRegion, requiredKind)) return
+
+        // Check that we don't allow mutable borrows of non-mutable data
+        if (!checkMutability(bccx, BorrowViolation(cause), cmt, requiredKind)) return
+
+        // Check that we don't allow mutable borrows of aliasable data
+        if (!checkAliasability(bccx, BorrowViolation(cause), cmt, requiredKind)) return
+
+        // Compute the restrictions that are required to enforce the loan is safe
+        val restrictions = computeRestrictions(bccx, cause, cmt, loanRegion)
+
+
     }
 }
 
