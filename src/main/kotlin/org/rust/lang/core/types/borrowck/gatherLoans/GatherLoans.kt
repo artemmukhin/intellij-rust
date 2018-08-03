@@ -11,6 +11,7 @@ import org.rust.lang.core.psi.ext.RsElement
 import org.rust.lang.core.types.borrowck.*
 import org.rust.lang.core.types.borrowck.gatherLoans.AliasableViolationKind.BorrowViolation
 import org.rust.lang.core.types.borrowck.gatherLoans.AliasableViolationKind.MutabilityViolation
+import org.rust.lang.core.types.borrowck.gatherLoans.RestrictionResult.SafeIf
 import org.rust.lang.core.types.infer.Aliasability.FreelyAliasable
 import org.rust.lang.core.types.infer.Aliasability.NonAliasable
 import org.rust.lang.core.types.infer.AliasableReason.AliasableStatic
@@ -21,12 +22,10 @@ import org.rust.lang.core.types.infer.BorrowKind.MutableBorrow
 import org.rust.lang.core.types.infer.Categorization
 import org.rust.lang.core.types.infer.Cmt
 import org.rust.lang.core.types.infer.MemoryCategorizationContext
-import org.rust.lang.core.types.regions.ReEmpty
-import org.rust.lang.core.types.regions.Region
-import org.rust.lang.core.types.regions.Scope
+import org.rust.lang.core.types.regions.*
 
 fun gatherLoansInFn(bccx: BorrowCheckContext, body: RsBlock): Pair<List<Loan>, MoveData> {
-    val glcx = GatherLoanContext(bccx, MoveData(), emptyList(), Scope.createNode(body))
+    val glcx = GatherLoanContext(bccx, MoveData(), mutableListOf(), Scope.createNode(body))
     val visitor = ExprUseVisitor(glcx, MemoryCategorizationContext(bccx.regionScopeTree))
     visitor.consumeBody(bccx.body)
     // glcx.reportPotentialErrors()
@@ -37,7 +36,7 @@ class GatherLoanContext(
     val bccx: BorrowCheckContext,
     val moveData: MoveData,
     // val moveErrorCollector: MoveErrorCollector,
-    val allLoans: List<Loan>,
+    val allLoans: MutableList<Loan>,
     val itemUpperBound: Scope
 ) : Delegate {
     override fun consume(element: RsElement, cmt: Cmt, mode: ConsumeMode) {
@@ -96,7 +95,7 @@ class GatherLoanContext(
         if (loanRegion is ReEmpty) return
 
         // Check that the lifetime of the borrow does not exceed the lifetime of the data being borrowed
-        if (!guaranteeLifetime(bccx, itemUpperBound, cause, cmt, loanRegion, requiredKind)) return
+        if (!guaranteeLifetime(bccx, itemUpperBound, cause, cmt, loanRegion)) return
 
         // Check that we don't allow mutable borrows of non-mutable data
         if (!checkMutability(bccx, BorrowViolation(cause), cmt, requiredKind)) return
@@ -105,9 +104,97 @@ class GatherLoanContext(
         if (!checkAliasability(bccx, BorrowViolation(cause), cmt, requiredKind)) return
 
         // Compute the restrictions that are required to enforce the loan is safe
-        val restrictions = computeRestrictions(bccx, cause, cmt, loanRegion)
+        // No restrictions -- no loan record necessary
+        val restriction = computeRestrictions(bccx, cause, cmt, loanRegion) as? SafeIf ?: return
+        val loanPath = restriction.loanPath
+        val restrictedPaths = restriction.loanPaths
 
+        val loanScope = when (loanRegion) {
+            is ReScope -> loanRegion.scope
+            is ReEarlyBound -> bccx.regionScopeTree.getEarlyFreeScope(loanRegion)
+            is ReFree -> bccx.regionScopeTree.getFreeScope(loanRegion)
+            is ReStatic -> itemUpperBound
+            else -> return // invalid borrow lifetime
+        }
 
+        val borrowScope = Scope.createNode(element)
+        val genScope = computeGenScope(borrowScope, loanScope)
+        val killScope = computeKillScope(loanScope, loanPath)
+
+        if (requiredKind == MutableBorrow) markLoanPathAsMutated(loanPath)
+
+        val loan = Loan(allLoans.size, loanPath, requiredKind, restrictedPaths, genScope, killScope, cause)
+        allLoans.add(loan)
+    }
+
+    /**
+     * For mutable loans of content whose mutability derives
+     * from a local variable, mark the mutability decl as necessary.
+     */
+    fun markLoanPathAsMutated(loanPath: LoanPath) {
+        var wrappedPath: LoanPath? = loanPath
+        var throughBorrow = false
+
+        while (wrappedPath != null) {
+            val currentPath = wrappedPath
+            val kind = currentPath.kind
+
+            wrappedPath = when (kind) {
+                is LoanPathKind.Var -> {
+                    if (!throughBorrow) bccx.usedMutNodes.add(kind.element)
+                    null
+                }
+
+                is LoanPathKind.Upvar -> {
+                    // bccx.usedMutNodes.add(kind.element)
+                    null
+                }
+
+                is LoanPathKind.Downcast -> kind.loanPath
+
+                is LoanPathKind.Extend -> {
+                    if (kind.mutCategory.isMutable) {
+                        if (kind.lpElement is LoanPathElement.Deref) {
+                            throughBorrow = true
+                            kind.loanPath
+                        } else {
+                            kind.loanPath
+                        }
+                    } else {
+                        null
+                    }
+                }
+            }
+
+        }
+    }
+
+    /**
+     * Determine when to introduce the loan. Typically the loan is introduced at the point of the borrow
+     * but in some cases, notably method arguments, the loan may be introduced only later, once it comes into scope.
+     */
+    fun computeGenScope(borrowScope: Scope, loanScope: Scope): Scope =
+        if (bccx.regionScopeTree.isSubScopeOf(borrowScope, loanScope)) borrowScope else loanScope
+
+    /**
+     * Determine when the loan restrictions go out of scope. This is either when the lifetime expires or when the
+     * local variable which roots the loan-path goes out of scope, whichever happens faster.
+     *
+     * It may seem surprising that we might have a loan region larger than the variable which roots the loan-path;
+     * this can come about when variables of `&mut` type are re-borrowed, as in this example:
+     *
+     *      struct Foo { counter: u32 }
+     *      fn counter<'a>(v: &'a mut Foo) -> &'a mut u32 {
+     *          &mut v.counter
+     *      }
+     *
+     * In this case, the reference (`'a`) outlives the variable `v` that hosts it.
+     * Note that this doesn't come up with immutable `&` pointers, because borrows of such pointers
+     * do not require restrictions and hence do not cause a loan.
+     */
+    fun computeKillScope(loanScope: Scope, loanPath: LoanPath): Scope {
+        val lexicalScope = loanPath.killScope(bccx)
+        return if (bccx.regionScopeTree.isSubScopeOf(lexicalScope, loanScope)) lexicalScope else loanScope
     }
 }
 
