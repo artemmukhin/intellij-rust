@@ -73,4 +73,29 @@ fun gatherMoveFromPat(
     gatherMove(bccx, moveData, moveErrorCollector, moveInfo)
 }
 
+fun gatherMove(
+    bccx: BorrowCheckContext,
+    moveData: MoveData,
+    moveErrorCollector: MoveErrorCollector,
+    moveInfo: GatherMoveInfo
+) {
+    val move = checkAndGetIllegalMoveOrigin(bccx, moveInfo.cmt)
+    if (move != null) {
+        val error = MoveError(move, moveInfo.movePlace)
+        moveErrorCollector.addError(error)
+    } else {
+        loanPathIsField(moveInfo.cmt).first?.let { moveData.addMove(it, moveInfo.element, moveInfo.kind) }
+    }
+}
+
+fun gatherAssignment(
+    bccx: BorrowCheckContext,
+    moveData: MoveData,
+    assignment: RsElement,
+    assigneeLoanPath: LoanPath,
+    assignee: RsElement,
+    mode: MutateMode
+) {
+    moveData.addAssignment(assigneeLoanPath, assignment, assignee, mode)
+}
 
