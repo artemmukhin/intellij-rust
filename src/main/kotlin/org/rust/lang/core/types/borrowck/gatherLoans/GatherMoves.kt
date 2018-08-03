@@ -10,6 +10,7 @@ import org.rust.lang.core.psi.*
 import org.rust.lang.core.psi.ext.RsElement
 import org.rust.lang.core.types.borrowck.*
 import org.rust.lang.core.types.borrowck.MoveReason.*
+import org.rust.lang.core.types.infer.Categorization
 import org.rust.lang.core.types.infer.Cmt
 import org.rust.lang.core.types.ty.Ty
 
@@ -97,5 +98,17 @@ fun gatherAssignment(
     mode: MutateMode
 ) {
     moveData.addAssignment(assigneeLoanPath, assignment, assignee, mode)
+}
+
+fun checkAndGetIllegalMoveOrigin(bccx: BorrowCheckContext, cmt: Cmt): Cmt? {
+    val category = cmt.category
+    return when (category) {
+        is Categorization.Rvalue, is Categorization.Local, is Categorization.Upvar -> null
+        is Categorization.StaticItem -> cmt
+        is Categorization.Deref -> TODO()
+        is Categorization.Interior -> TODO()
+        is Categorization.Downcast -> TODO()
+        null -> TODO()
+    }
 }
 
