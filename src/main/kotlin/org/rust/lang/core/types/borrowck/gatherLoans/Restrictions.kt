@@ -62,32 +62,39 @@ class RestrictionContext(val bccx: BorrowCheckContext, val loanRegion: Region, v
                             BorrowKind.MutableBorrow -> extend(restrict(baseCmt), cmt, LoanPathElement.Deref(pointerKind))
                         }
                     }
-                    is PointerKind.UnsafePointer -> TODO()
+                    is PointerKind.UnsafePointer -> Safe
                 }
             }
 
             is Categorization.Interior -> {
+                val interiorKind = category.interiorKind
                 val baseCmt = category.cmt
                 val baseType = baseCmt.ty
                 val variant = (baseCmt.category as? Categorization.Downcast)?.element
                 val result = restrict(baseCmt)
-                if (baseType is TyAdt && (baseType.item as? RsStructItem)?.kind == RsStructKind.UNION) {
-                    return when (result) {
+
+                fun processFields(item: RsStructItem, result: SafeIf) {
+                    item.namedFields.forEachIndexed { i, field ->
+                        val fieldInteriorKind = InteriorField(FieldIndex(i, field.name))
+                        val fieldType = if (fieldInteriorKind == interiorKind) cmt.ty else TyUnknown
+                        val siblingLpKind = Extend(result.loanPath, cmt.mutabilityCategory, Interior(variant, fieldInteriorKind))
+                        val siblingLp = LoanPath(siblingLpKind, fieldType)
+                        result.loanPaths.add(siblingLp)
+                    }
+                }
+
+                // Borrowing one union field automatically borrows all its fields.
+                return if (baseType is TyAdt && (baseType.item as? RsStructItem)?.kind == RsStructKind.UNION) {
+                    when (result) {
                         is Safe -> Safe
                         is SafeIf -> {
-                            baseType.item.namedFields.forEachIndexed { i, field ->
-                                val fieldInteriorKind = InteriorField(FieldIndex(i, field.name))
-                                val fieldType = if (fieldInteriorKind == category.interiorKind) cmt.ty else TyUnknown
-                                val siblingLpKind = Extend(result.loanPath, cmt.mutabilityCategory, Interior(variant, fieldInteriorKind))
-                                val siblingLp = LoanPath(siblingLpKind, fieldType)
-                                result.loanPaths.add(siblingLp)
-                            }
-                            val lp = loanPath(Extend(result.loanPath, cmt.mutabilityCategory, Interior(variant, category.interiorKind)))
+                            processFields(baseType.item, result)
+                            val lp = loanPath(Extend(result.loanPath, cmt.mutabilityCategory, Interior(variant, interiorKind)))
                             SafeIf(lp, result.loanPaths)
                         }
                     }
                 } else {
-                    return extend(result, cmt, Interior(variant, category.interiorKind))
+                    extend(result, cmt, Interior(variant, interiorKind))
                 }
             }
 
