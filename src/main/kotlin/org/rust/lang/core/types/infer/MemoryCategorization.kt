@@ -76,9 +76,11 @@ sealed class PointerKind {
 }
 
 sealed class InteriorKind {
-    object InteriorField : InteriorKind()
+    class InteriorField(fieldIndex: FieldIndex? = null) : InteriorKind()
     object InteriorElement : InteriorKind()
 }
+
+class FieldIndex(index: Int, name: String?)
 
 sealed class ImmutabilityBlame {
     class ImmutableLocal(val element: RsElement) : ImmutabilityBlame()
@@ -218,7 +220,7 @@ class MemoryCategorizationContext(
         val type = dotExpr.type
         val base = dotExpr.expr
         val baseCmt = processExpr(base)
-        return Cmt(dotExpr, Interior(baseCmt, InteriorField), baseCmt.mutabilityCategory.inherit(), type)
+        return Cmt(dotExpr, Interior(baseCmt, InteriorField()), baseCmt.mutabilityCategory.inherit(), type)
     }
 
     fun processIndexExpr(indexExpr: RsIndexExpr): Cmt {
