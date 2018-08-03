@@ -12,7 +12,12 @@ import org.rust.lang.core.types.borrowck.*
 import org.rust.lang.core.types.borrowck.MoveReason.*
 import org.rust.lang.core.types.infer.Categorization
 import org.rust.lang.core.types.infer.Cmt
+import org.rust.lang.core.types.infer.InteriorKind.InteriorElement
+import org.rust.lang.core.types.infer.InteriorKind.InteriorField
+import org.rust.lang.core.types.infer.InteriorOffsetKind
 import org.rust.lang.core.types.ty.Ty
+import org.rust.lang.core.types.ty.TyAdt
+import org.rust.lang.core.types.ty.TySlice
 
 class GatherMoveInfo(
     val element: RsElement,
@@ -104,11 +109,35 @@ fun checkAndGetIllegalMoveOrigin(bccx: BorrowCheckContext, cmt: Cmt): Cmt? {
     val category = cmt.category
     return when (category) {
         is Categorization.Rvalue, is Categorization.Local, is Categorization.Upvar -> null
-        is Categorization.StaticItem -> cmt
-        is Categorization.Deref -> TODO()
-        is Categorization.Interior -> TODO()
-        is Categorization.Downcast -> TODO()
-        null -> TODO()
+
+        is Categorization.StaticItem, is Categorization.Deref -> cmt
+
+        is Categorization.Interior -> {
+            val kind = category.interiorKind
+            when {
+                kind is InteriorField || (kind is InteriorElement && kind.offsetKind == InteriorOffsetKind.Pattern) -> {
+                    val base = category.cmt
+                    when (base.ty) {
+                        is TyAdt -> if (base.ty.item.hasDestructor) cmt else checkAndGetIllegalMoveOrigin(bccx, base)
+                        is TySlice -> cmt
+                        else -> checkAndGetIllegalMoveOrigin(bccx, base)
+                    }
+                }
+                kind is InteriorElement && kind.offsetKind == InteriorOffsetKind.Index -> cmt
+                else -> cmt
+            }
+        }
+
+        is Categorization.Downcast -> {
+            val base = category.cmt
+            when (base.ty) {
+                is TyAdt -> if (base.ty.item.hasDestructor) cmt else checkAndGetIllegalMoveOrigin(bccx, base)
+                is TySlice -> cmt
+                else -> checkAndGetIllegalMoveOrigin(bccx, base)
+            }
+        }
+
+        null -> null
     }
 }
 

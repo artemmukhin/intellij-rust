@@ -76,8 +76,13 @@ sealed class PointerKind {
 }
 
 sealed class InteriorKind {
-    class InteriorField(fieldIndex: FieldIndex? = null) : InteriorKind()
-    object InteriorElement : InteriorKind()
+    class InteriorField(val fieldIndex: FieldIndex? = null) : InteriorKind()
+    class InteriorElement(val offsetKind: InteriorOffsetKind) : InteriorKind()
+}
+
+enum class InteriorOffsetKind {
+    Index,
+    Pattern
 }
 
 class FieldIndex(index: Int, name: String?)
