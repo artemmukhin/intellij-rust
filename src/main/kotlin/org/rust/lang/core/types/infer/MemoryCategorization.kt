@@ -232,7 +232,7 @@ class MemoryCategorizationContext(
         val type = indexExpr.type
         val base = indexExpr.containerExpr ?: return Cmt(indexExpr, ty = type)
         val baseCmt = processExpr(base)
-        return Cmt(indexExpr, Interior(baseCmt, InteriorElement), baseCmt.mutabilityCategory.inherit(), type)
+        return Cmt(indexExpr, Interior(baseCmt, InteriorElement(InteriorOffsetKind.Index)), baseCmt.mutabilityCategory.inherit(), type)
     }
 
     fun processPathExpr(pathExpr: RsPathExpr): Cmt {
