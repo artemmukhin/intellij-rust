@@ -58,10 +58,41 @@ class MoveData(
     fun isVariablePath(pathIndex: MovePathIndex): Boolean =
         paths[pathIndex].parent == null
 
+    fun forEachExtendingPath(index: MovePathIndex, action: (MoveIndex) -> Boolean): Boolean {
+        if (!action(index)) return false
+
+        var p = paths[index].firstChild
+        while (p != null) {
+            if (!forEachExtendingPath(p, action)) return false
+            p = paths[p].nextSibling
+        }
+
+        return true
+    }
+
+    fun forEachApplicableMove(index: MovePathIndex, action: (MoveIndex) -> Boolean): Boolean {
+        var result = true
+        forEachExtendingPath(index) { moveIndex ->
+            var p: MovePathIndex? = paths[moveIndex].firstMove
+            while (p != null) {
+                if (!action(p)) {
+                    result = false
+                    break
+                }
+                p = moves[p].nextMove
+            }
+            result
+        }
+        return result
+    }
+
     fun killMoves(pathIndex: MovePathIndex, killElement: RsElement, killKind: KillFrom, dfcxMoves: MoveDataFlow) {
         val loanPath = paths[pathIndex].loanPath
         if (loanPath.isPrecise) {
-            // TODO
+            forEachApplicableMove(pathIndex) { moveIndex ->
+                dfcxMoves.addKill(killKind, killElement, moveIndex)
+                true
+            }
         }
     }
 
