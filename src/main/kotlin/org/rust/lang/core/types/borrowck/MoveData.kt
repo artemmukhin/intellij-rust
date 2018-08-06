@@ -130,9 +130,32 @@ class MoveData(
         return index
     }
 
+    private fun processUnionFields(loanPath: LoanPath, lpKind: LoanPathKind.Extend, action: (LoanPath) -> Unit) {
+        val base = lpKind.loanPath
+        val baseType = base.ty as? TyAdt ?: return
+        val lpElement = lpKind.lpElement as? Interior ?: return
+        val item = baseType.item as? RsStructItem ?: return
+        if (!item.isUnion) return
+
+        val interiorKind = lpElement.kind
+        val variant = lpElement.element
+        val mutCat = lpKind.mutCategory
+
+        // Moving one union field automatically moves all its fields
+        item.namedFields.forEachIndexed { i, field ->
+            val fieldInteriorKind = InteriorKind.InteriorField(FieldIndex(i, field.name))
+            val fieldType = if (fieldInteriorKind == interiorKind) loanPath.ty else TyUnknown
+            if (fieldInteriorKind != interiorKind) {
+                val siblingLpKind = Extend(base, mutCat, Interior(variant, fieldInteriorKind))
+                val siblingLp = LoanPath(siblingLpKind, fieldType)
+                action(siblingLp)
+            }
+        }
+    }
+
     /** Adds a new move entry for a move of [loanPath] that occurs at location [element] with kind [kind] */
     fun addMove(loanPath: LoanPath, element: RsElement, kind: MoveKind) {
-        fun addMoveHelper(loanPath: LoanPath, element: RsElement, kind: MoveKind) {
+        fun addMoveHelper(loanPath: LoanPath) {
             val pathIndex = movePath(loanPath)
             val nextMove = paths[pathIndex].firstMove
             paths[pathIndex].firstMove = moves.size
@@ -141,32 +164,14 @@ class MoveData(
 
         var lp = loanPath
         var lpKind = lp.kind
-        while (lpKind is LoanPathKind.Extend) {
+        while (lpKind is Extend) {
             val base = lpKind.loanPath
-            val mutCat = lpKind.mutCategory
-            val baseType = base.ty
-            val lpElement = lpKind.lpElement
-
-            // Moving one union field automatically moves all its fields
-            if (baseType is TyAdt && lpElement is Interior && baseType.item is RsStructItem && baseType.item.isUnion) {
-                val variant = lpElement.element
-                val interiorKind = lpElement.kind
-
-                baseType.item.namedFields.forEachIndexed { i, field ->
-                    val fieldInteriorKind = InteriorKind.InteriorField(FieldIndex(i, field.name))
-                    if (fieldInteriorKind != interiorKind) {
-                        val siblingLpKind = Extend(base, mutCat, Interior(variant, fieldInteriorKind))
-                        val siblingLp = LoanPath(siblingLpKind, TyUnknown)
-                        addMoveHelper(siblingLp, element, kind)
-                    }
-                }
-
-            }
+            processUnionFields(loanPath, lpKind) { addMoveHelper(it) }
             lp = base
             lpKind = lp.kind
         }
 
-        addMoveHelper(loanPath, element, kind)
+        addMoveHelper(loanPath)
     }
 
     fun addAssignment(loanPath: LoanPath, assign: RsElement, assignee: RsElement, mode: MutateMode) {
@@ -188,26 +193,7 @@ class MoveData(
 
         val lpKind = loanPath.kind
         if (lpKind is Extend) {
-            val base = lpKind.loanPath
-            val mutCat = lpKind.mutCategory
-            val baseType = base.ty
-            val lpElement = lpKind.lpElement
-
-            if (baseType is TyAdt && lpElement is Interior && baseType.item is RsStructItem && baseType.item.isUnion) {
-                val variant = lpElement.element
-                val interiorKind = lpElement.kind
-
-                baseType.item.namedFields.forEachIndexed { i, field ->
-                    val fieldInteriorKind = InteriorKind.InteriorField(FieldIndex(i, field.name))
-                    val fieldType = if (fieldInteriorKind == interiorKind) loanPath.ty else TyUnknown
-                    if (fieldInteriorKind != interiorKind) {
-                        val siblingLpKind = Extend(base, mutCat, Interior(variant, fieldInteriorKind))
-                        val siblingLp = LoanPath(siblingLpKind, fieldType)
-                        addAssignmentHelper(siblingLp)
-                    }
-                }
-
-            }
+            processUnionFields(loanPath, lpKind) { addAssignmentHelper(it) }
         } else {
             addAssignmentHelper(loanPath)
         }
