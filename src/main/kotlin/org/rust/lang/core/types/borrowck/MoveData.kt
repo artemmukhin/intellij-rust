@@ -55,6 +55,9 @@ class MoveData(
     fun isEmpty(): Boolean =
         moves.isEmpty() && pathAssignments.isEmpty() && varAssignments.isEmpty()
 
+    fun isVariablePath(pathIndex: MovePathIndex): Boolean =
+        paths[pathIndex].parent == null
+
     fun killMoves(pathIndex: MovePathIndex, killElement: RsElement, killKind: KillFrom, dfcxMoves: MoveDataFlow) {
         val loanPath = paths[pathIndex].loanPath
         if (loanPath.isPrecise) {
@@ -127,8 +130,8 @@ class MoveData(
         return index
     }
 
-    /** Adds a new move entry for a move of [origLoanPath] that occurs at location [element] with kind [kind] */
-    fun addMove(origLoanPath: LoanPath, element: RsElement, kind: MoveKind) {
+    /** Adds a new move entry for a move of [loanPath] that occurs at location [element] with kind [kind] */
+    fun addMove(loanPath: LoanPath, element: RsElement, kind: MoveKind) {
         fun addMoveHelper(loanPath: LoanPath, element: RsElement, kind: MoveKind) {
             val pathIndex = movePath(loanPath)
             val nextMove = paths[pathIndex].firstMove
@@ -136,7 +139,7 @@ class MoveData(
             moves.add(Move(pathIndex, element, kind, nextMove))
         }
 
-        var lp = origLoanPath
+        var lp = loanPath
         var lpKind = lp.kind
         while (lpKind is LoanPathKind.Extend) {
             val base = lpKind.loanPath
@@ -163,7 +166,51 @@ class MoveData(
             lpKind = lp.kind
         }
 
-        addMoveHelper(origLoanPath.copy(), element, kind)
+        addMoveHelper(loanPath, element, kind)
+    }
+
+    fun addAssignment(loanPath: LoanPath, assign: RsElement, assignee: RsElement, mode: MutateMode) {
+        fun addAssignmentHelper(loanPath: LoanPath) {
+            val pathIndex = movePath(loanPath)
+
+            if (mode == MutateMode.Init || mode == MutateMode.JustWrite) {
+                assigneeElements.add(assignee)
+            }
+
+            val assignment = Assignment(pathIndex, assign, assignee)
+
+            if (isVariablePath(pathIndex)) {
+                varAssignments.add(assignment)
+            } else {
+                pathAssignments.add(assignment)
+            }
+        }
+
+        val lpKind = loanPath.kind
+        if (lpKind is Extend) {
+            val base = lpKind.loanPath
+            val mutCat = lpKind.mutCategory
+            val baseType = base.ty
+            val lpElement = lpKind.lpElement
+
+            if (baseType is TyAdt && lpElement is Interior && baseType.item is RsStructItem && baseType.item.isUnion) {
+                val variant = lpElement.element
+                val interiorKind = lpElement.kind
+
+                baseType.item.namedFields.forEachIndexed { i, field ->
+                    val fieldInteriorKind = InteriorKind.InteriorField(FieldIndex(i, field.name))
+                    val fieldType = if (fieldInteriorKind == interiorKind) loanPath.ty else TyUnknown
+                    if (fieldInteriorKind != interiorKind) {
+                        val siblingLpKind = Extend(base, mutCat, Interior(variant, fieldInteriorKind))
+                        val siblingLp = LoanPath(siblingLpKind, fieldType)
+                        addAssignmentHelper(siblingLp)
+                    }
+                }
+
+            }
+        } else {
+            addAssignmentHelper(loanPath)
+        }
     }
 }
 
