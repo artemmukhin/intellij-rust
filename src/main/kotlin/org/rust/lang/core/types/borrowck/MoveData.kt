@@ -51,20 +51,12 @@ class MoveData(
     /** Assignments to a variable or path, like `x = foo`, but not `x += foo`. */
     val assigneeElements: MutableSet<RsElement> = mutableSetOf()
 ) {
-    fun pathLoanPath(index: MovePathIndex): LoanPath =
-        paths[index.index].loanPath.copy()
-
-    fun pathParent(index: MovePathIndex): MovePathIndex? =
-        paths[index.index].parent
-
-    fun pathFirstMove(index: MovePathIndex): MoveIndex? =
-        paths[index.index].firstMove
 
     fun isEmpty(): Boolean =
         moves.isEmpty() && pathAssignments.isEmpty() && varAssignments.isEmpty()
 
-    fun killMoves(path: MovePathIndex, killElement: RsElement, killKind: KillFrom, dfcxMoves: MoveDataFlow) {
-        val loanPath = this.pathLoanPath(path)
+    fun killMoves(pathIndex: MovePathIndex, killElement: RsElement, killKind: KillFrom, dfcxMoves: MoveDataFlow) {
+        val loanPath = paths[pathIndex].loanPath
         if (loanPath.isPrecise) {
             // TODO
         }
@@ -99,7 +91,7 @@ class MoveData(
         }
 
         varAssignments.forEachIndexed { i, assignment ->
-            val lp = pathLoanPath(assignment.path)
+            val lp = paths[assignment.path].loanPath
             if (lp.kind is Var || lp.kind is Upvar || lp.kind is Downcast) {
                 val killScope = lp.killScope(bccx)
                 dfcxAssign.addKill(ScopeEnd, killScope.element, i)
@@ -115,26 +107,22 @@ class MoveData(
         pathMap[loanPath]?.let { return it }
 
         val kind = loanPath.kind
-        val index = when (kind) {
-            is Var, is Upvar -> {
-                val movePath = MovePath(loanPath)
-                paths.add(movePath)
-                MovePathIndex(paths.size)
-            }
+        val index = paths.size
+        when (kind) {
+            is Var, is Upvar -> paths.add(MovePath(loanPath))
 
             is Downcast, is Extend -> {
                 val base = (kind as? Downcast)?.loanPath ?: (kind as? Extend)?.loanPath!!
                 val parentIndex = movePath(base)
-                val index = MovePathIndex(paths.size)
-                val nextSibling = pathFirstChild(parentIndex)
-                setPathFirstChild(parentIndex, index)
+                val nextSibling = paths[parentIndex].firstChild
 
-                val movePath = MovePath(loanPath, parentIndex, null, null, nextSibling)
-                index
+                paths[parentIndex].firstChild = paths.size
+
+                paths.add(MovePath(loanPath, parentIndex, null, null, nextSibling))
             }
         }
 
-        testAssert { index.index == paths.size - 1 }
+        testAssert { index == paths.size - 1 }
         pathMap[loanPath] = index
         return index
     }
@@ -173,10 +161,10 @@ class MoveData(
 
     fun addMoveHelper(loanPath: LoanPath, element: RsElement, kind: MoveKind) {
         val pathIndex = movePath(loanPath)
-        val moveIndex = MoveIndex(moves.size)
+        val moveIndex = moves.size
 
-        val nextMove = pathFirstMove(pathIndex)
-        setPathFirstMove(pathIndex, moveIndex)
+        val nextMove = paths[pathIndex].firstMove
+        paths[pathIndex].firstMove = moveIndex
 
         val move = Move(pathIndex, element, kind, nextMove)
         moves.add(move)
@@ -213,14 +201,14 @@ class Move(
 
 class MovePath(
     val loanPath: LoanPath,
-    val parent: MovePathIndex? = null,
-    val firstMove: MoveIndex? = null,
-    val firstChild: MovePathIndex? = null,
-    val nextSibling: MovePathIndex? = null
+    var parent: MovePathIndex? = null,
+    var firstMove: MoveIndex? = null,
+    var firstChild: MovePathIndex? = null,
+    var nextSibling: MovePathIndex? = null
 )
 
-data class MoveIndex(val index: Int)
-data class MovePathIndex(val index: Int)
+typealias MoveIndex = Int
+typealias MovePathIndex = Int
 
 enum class MoveKind {
     Declared,   // When declared, variables start out "moved".
