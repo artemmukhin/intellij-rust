@@ -129,6 +129,13 @@ class MoveData(
 
     /** Adds a new move entry for a move of [origLoanPath] that occurs at location [element] with kind [kind] */
     fun addMove(origLoanPath: LoanPath, element: RsElement, kind: MoveKind) {
+        fun addMoveHelper(loanPath: LoanPath, element: RsElement, kind: MoveKind) {
+            val pathIndex = movePath(loanPath)
+            val nextMove = paths[pathIndex].firstMove
+            paths[pathIndex].firstMove = moves.size
+            moves.add(Move(pathIndex, element, kind, nextMove))
+        }
+
         var lp = origLoanPath
         var lpKind = lp.kind
         while (lpKind is LoanPathKind.Extend) {
@@ -157,17 +164,6 @@ class MoveData(
         }
 
         addMoveHelper(origLoanPath.copy(), element, kind)
-    }
-
-    fun addMoveHelper(loanPath: LoanPath, element: RsElement, kind: MoveKind) {
-        val pathIndex = movePath(loanPath)
-        val moveIndex = moves.size
-
-        val nextMove = paths[pathIndex].firstMove
-        paths[pathIndex].firstMove = moveIndex
-
-        val move = Move(pathIndex, element, kind, nextMove)
-        moves.add(move)
     }
 }
 
