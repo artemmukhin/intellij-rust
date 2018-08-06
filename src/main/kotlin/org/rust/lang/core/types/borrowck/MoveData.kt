@@ -23,6 +23,7 @@ import org.rust.lang.core.types.infer.FieldIndex
 import org.rust.lang.core.types.infer.InteriorKind
 import org.rust.lang.core.types.ty.TyAdt
 import org.rust.lang.core.types.ty.TyUnknown
+import org.rust.openapiext.testAssert
 
 class MoveData(
     val paths: MutableList<MovePath> = mutableListOf(),
@@ -106,6 +107,38 @@ class MoveData(
         }
     }
 
+    /**
+     * Returns the existing move path index for [loanPath], if any, and otherwise adds a new index for [loanPath]
+     * and any of its base paths that do not yet have an index.
+     */
+    fun movePath(loanPath: LoanPath): MovePathIndex {
+        pathMap[loanPath]?.let { return it }
+
+        val kind = loanPath.kind
+        val index = when (kind) {
+            is Var, is Upvar -> {
+                val movePath = MovePath(loanPath)
+                paths.add(movePath)
+                MovePathIndex(paths.size)
+            }
+
+            is Downcast, is Extend -> {
+                val base = (kind as? Downcast)?.loanPath ?: (kind as? Extend)?.loanPath!!
+                val parentIndex = movePath(base)
+                val index = MovePathIndex(paths.size)
+                val nextSibling = pathFirstChild(parentIndex)
+                setPathFirstChild(parentIndex, index)
+
+                val movePath = MovePath(loanPath, parentIndex, null, null, nextSibling)
+                index
+            }
+        }
+
+        testAssert { index.index == paths.size - 1 }
+        pathMap[loanPath] = index
+        return index
+    }
+
     /** Adds a new move entry for a move of [origLoanPath] that occurs at location [element] with kind [kind] */
     fun addMove(origLoanPath: LoanPath, element: RsElement, kind: MoveKind) {
         var lp = origLoanPath
@@ -180,10 +213,10 @@ class Move(
 
 class MovePath(
     val loanPath: LoanPath,
-    val parent: MovePathIndex?,
-    val firstMove: MoveIndex?,
-    val firstChild: MovePathIndex?,
-    val nextSibling: MovePathIndex?
+    val parent: MovePathIndex? = null,
+    val firstMove: MoveIndex? = null,
+    val firstChild: MovePathIndex? = null,
+    val nextSibling: MovePathIndex? = null
 )
 
 data class MoveIndex(val index: Int)
