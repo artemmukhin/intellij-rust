@@ -84,6 +84,7 @@ class MoveData(
             killMoves(assignment.path, assignment.element, Execution, dfcxMoves)
         }
 
+        // Kill all moves related to a variable `x` when it goes out of scope
         paths.forEach { path ->
             val kind = path.loanPath.kind
             if (kind is Var || kind is Upvar || kind is Downcast) {
@@ -93,6 +94,7 @@ class MoveData(
             }
         }
 
+        // Kill all assignments when the variable goes out of scope
         varAssignments.forEachIndexed { i, assignment ->
             val lp = paths[assignment.path].loanPath
             if (lp.kind is Var || lp.kind is Upvar || lp.kind is Downcast) {
@@ -119,7 +121,6 @@ class MoveData(
                 val nextSibling = paths[parentIndex].firstChild
 
                 paths[parentIndex].firstChild = paths.size
-
                 paths.add(MovePath(loanPath, parentIndex, null, null, nextSibling))
             }
         }
@@ -206,8 +207,20 @@ class FlowedMoveData(moveData: MoveData, bccx: BorrowCheckContext, cfg: ControlF
     val dataFlowAssign: AssignDataFlow
 
     init {
-        val dfcxMoves = DataFlowContext("flowed_move_data_moves", body, cfg, MoveDataFlowOperator, moveData.moves.size)
-        val dfcxAssign = DataFlowContext("flowed_move_data_assigns", body, cfg, AssignDataFlowOperator, moveData.varAssignments.size)
+        val dfcxMoves = DataFlowContext(
+            "flowed_move_data_moves",
+            body,
+            cfg,
+            MoveDataFlowOperator,
+            moveData.moves.size
+        )
+        val dfcxAssign = DataFlowContext(
+            "flowed_move_data_assigns",
+            body,
+            cfg,
+            AssignDataFlowOperator,
+            moveData.varAssignments.size
+        )
         moveData.addGenKills(bccx, dfcxMoves, dfcxAssign)
         dfcxMoves.addKillsFromFlowExits()
         dfcxAssign.addKillsFromFlowExits()
