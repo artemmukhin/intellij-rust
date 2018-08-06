@@ -6,8 +6,6 @@
 package org.rust.lang.core.types.borrowck.gatherLoans
 
 import org.rust.lang.core.psi.RsStructItem
-import org.rust.lang.core.psi.ext.RsStructKind
-import org.rust.lang.core.psi.ext.kind
 import org.rust.lang.core.psi.ext.namedFields
 import org.rust.lang.core.types.borrowck.*
 import org.rust.lang.core.types.borrowck.BorrowCheckErrorCode.BorrowedPointerTooShort
@@ -84,7 +82,7 @@ class RestrictionContext(val bccx: BorrowCheckContext, val loanRegion: Region, v
                 }
 
                 // Borrowing one union field automatically borrows all its fields.
-                return if (baseType is TyAdt && (baseType.item as? RsStructItem)?.kind == RsStructKind.UNION) {
+                return if (baseType is TyAdt && baseType.item is RsStructItem && baseType.item.isUnion) {
                     when (result) {
                         is Safe -> Safe
                         is SafeIf -> {

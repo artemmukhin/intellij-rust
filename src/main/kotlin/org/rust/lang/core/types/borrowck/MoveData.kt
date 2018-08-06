@@ -12,9 +12,17 @@ import org.rust.lang.core.KillFrom
 import org.rust.lang.core.KillFrom.Execution
 import org.rust.lang.core.KillFrom.ScopeEnd
 import org.rust.lang.core.psi.RsBlock
+import org.rust.lang.core.psi.RsStructItem
 import org.rust.lang.core.psi.ext.RsElement
+import org.rust.lang.core.psi.ext.RsStructKind
+import org.rust.lang.core.psi.ext.kind
+import org.rust.lang.core.psi.ext.namedFields
 import org.rust.lang.core.types.borrowck.LoanPathElement.Interior
 import org.rust.lang.core.types.borrowck.LoanPathKind.*
+import org.rust.lang.core.types.infer.FieldIndex
+import org.rust.lang.core.types.infer.InteriorKind
+import org.rust.lang.core.types.ty.TyAdt
+import org.rust.lang.core.types.ty.TyUnknown
 
 class MoveData(
     val paths: MutableList<MovePath> = mutableListOf(),
@@ -97,6 +105,49 @@ class MoveData(
             }
         }
     }
+
+    /** Adds a new move entry for a move of [origLoanPath] that occurs at location [element] with kind [kind] */
+    fun addMove(origLoanPath: LoanPath, element: RsElement, kind: MoveKind) {
+        var lp = origLoanPath
+        var lpKind = lp.kind
+        while (lpKind is LoanPathKind.Extend) {
+            val base = lpKind.loanPath
+            val mutCat = lpKind.mutCategory
+            val baseType = base.ty
+            val lpElement = lpKind.lpElement
+
+            // Moving one union field automatically moves all its fields
+            if (baseType is TyAdt && lpElement is Interior && baseType.item is RsStructItem && baseType.item.isUnion) {
+                val variant = lpElement.element
+                val interiorKind = lpElement.kind
+
+                baseType.item.namedFields.forEachIndexed { i, field ->
+                    val fieldInteriorKind = InteriorKind.InteriorField(FieldIndex(i, field.name))
+                    if (fieldInteriorKind != interiorKind) {
+                        val siblingLpKind = Extend(base, mutCat, Interior(variant, fieldInteriorKind))
+                        val siblingLp = LoanPath(siblingLpKind, TyUnknown)
+                        addMoveHelper(siblingLp, element, kind)
+                    }
+                }
+
+            }
+            lp = base
+            lpKind = lp.kind
+        }
+
+        addMoveHelper(origLoanPath.copy(), element, kind)
+    }
+
+    fun addMoveHelper(loanPath: LoanPath, element: RsElement, kind: MoveKind) {
+        val pathIndex = movePath(loanPath)
+        val moveIndex = MoveIndex(moves.size)
+
+        val nextMove = pathFirstMove(pathIndex)
+        setPathFirstMove(pathIndex, moveIndex)
+
+        val move = Move(pathIndex, element, kind, nextMove)
+        moves.add(move)
+    }
 }
 
 class FlowedMoveData(moveData: MoveData, bccx: BorrowCheckContext, cfg: ControlFlowGraph, body: RsBlock) {
@@ -175,3 +226,5 @@ val LoanPath.isPrecise: Boolean
         is Extend -> if (kind.lpElement is Interior) false else kind.loanPath.isPrecise
         is Downcast -> kind.loanPath.isPrecise
     }
+
+val RsStructItem.isUnion: Boolean get() = kind == RsStructKind.UNION
