@@ -110,7 +110,6 @@ class MoveData(
         pathMap[loanPath]?.let { return it }
 
         val kind = loanPath.kind
-        val index = paths.size
         when (kind) {
             is Var, is Upvar -> paths.add(MovePath(loanPath))
 
@@ -125,6 +124,7 @@ class MoveData(
             }
         }
 
+        val index = paths.size
         testAssert { index == paths.size - 1 }
         pathMap[loanPath] = index
         return index
@@ -141,7 +141,7 @@ class MoveData(
         val variant = lpElement.element
         val mutCat = lpKind.mutCategory
 
-        // Moving one union field automatically moves all its fields
+        // Moving/assigning one union field automatically moves/assigns all its fields
         item.namedFields.forEachIndexed { i, field ->
             val fieldInteriorKind = InteriorKind.InteriorField(FieldIndex(i, field.name))
             val fieldType = if (fieldInteriorKind == interiorKind) loanPath.ty else TyUnknown
