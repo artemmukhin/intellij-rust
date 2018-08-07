@@ -25,7 +25,7 @@ import org.rust.lang.core.types.infer.MemoryCategorizationContext
 import org.rust.lang.core.types.regions.*
 
 fun gatherLoansInFn(bccx: BorrowCheckContext, body: RsBlock): Pair<List<Loan>, MoveData> {
-    val glcx = GatherLoanContext(bccx, MoveData(), mutableListOf(), Scope.createNode(body))
+    val glcx = GatherLoanContext(bccx, MoveData(), null, mutableListOf(), Scope.createNode(body))
     val visitor = ExprUseVisitor(glcx, MemoryCategorizationContext(bccx.regionScopeTree))
     visitor.consumeBody(bccx.body)
     // glcx.reportPotentialErrors()
@@ -35,19 +35,19 @@ fun gatherLoansInFn(bccx: BorrowCheckContext, body: RsBlock): Pair<List<Loan>, M
 class GatherLoanContext(
     val bccx: BorrowCheckContext,
     val moveData: MoveData,
-    // val moveErrorCollector: MoveErrorCollector,
+    val moveErrorCollector: MoveErrorCollector,
     val allLoans: MutableList<Loan>,
     val itemUpperBound: Scope
 ) : Delegate {
     override fun consume(element: RsElement, cmt: Cmt, mode: ConsumeMode) {
-        if (mode is ConsumeMode.Move) gatherMoveFromExpr(bccx, moveData, element, cmt, mode.reason)
+        if (mode is ConsumeMode.Move) gatherMoveFromExpr(bccx, moveData, moveErrorCollector, element, cmt, mode.reason)
     }
 
     override fun matchedPat(pat: RsPat, cmt: Cmt, mode: MatchMode) {
     }
 
     override fun consumePat(pat: RsPat, cmt: Cmt, mode: ConsumeMode) {
-        if (mode is ConsumeMode.Move) gatherMoveFromPat(bccx, moveData, pat, cmt)
+        if (mode is ConsumeMode.Move) gatherMoveFromPat(bccx, moveData, moveErrorCollector, pat, cmt)
     }
 
     override fun borrow(element: RsElement, cmt: Cmt, loanRegion: Region, kind: BorrowKind, cause: LoanCause) {
@@ -55,7 +55,7 @@ class GatherLoanContext(
     }
 
     override fun declarationWithoutInit(element: RsElement) {
-        gatherDeclaration(bccx, moveData, element)
+        gatherDeclaration(bccx, moveData, element, element.type)
     }
 
     override fun mutate(assignmentElement: RsElement, assigneeCmt: Cmt, mode: MutateMode) {

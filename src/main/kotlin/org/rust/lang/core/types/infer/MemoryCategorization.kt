@@ -5,7 +5,6 @@
 
 package org.rust.lang.core.types.infer
 
-import com.intellij.psi.util.parentOfType
 import org.rust.lang.core.psi.*
 import org.rust.lang.core.psi.ext.RsElement
 import org.rust.lang.core.psi.ext.containerExpr
@@ -236,9 +235,6 @@ class MemoryCategorizationContext(
     }
 
     fun processPathExpr(pathExpr: RsPathExpr): Cmt {
-        fun isClosureParameter(declaration: RsElement): Boolean =
-            declaration.parentOfType<RsValueParameter>()?.parentOfType<RsLambdaExpr>() != null
-
         val type = pathExpr.type
         val declaration = pathExpr.path.reference.resolve() ?: return Cmt(pathExpr, ty = type)
         return when (declaration) {
@@ -253,7 +249,7 @@ class MemoryCategorizationContext(
             is RsEnumVariant, is RsStructItem, is RsFunction -> processRvalue(pathExpr)
 
             is RsPatBinding -> {
-                val category = if (isClosureParameter(declaration)) Upvar else Local(declaration)
+                val category = Local(declaration)
                 Cmt(pathExpr, category, MutabilityCategory.from(declaration.mutability), type)
             }
 

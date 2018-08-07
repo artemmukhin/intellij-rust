@@ -17,6 +17,7 @@ import org.rust.lang.core.psi.RsBlock
 import org.rust.lang.core.psi.RsFile
 import org.rust.lang.core.psi.RsFunction
 import org.rust.lang.core.stubs.RsFileStub
+import kotlin.reflect.KClass
 
 
 val PsiElement.ancestors: Sequence<PsiElement> get() = generateSequence(this) {
@@ -131,4 +132,10 @@ fun RsElement.getStartOffsetIn(target: RsElement): Int? {
         current = current.stubAncestorStrict() ?: return null
     }
     return startOffset
+}
+
+inline fun <reified T : PsiElement> PsiElement.parentOfType(): T? = parentOfType(T::class)
+
+fun <T : PsiElement> PsiElement.parentOfType(vararg classes: KClass<out T>): T? {
+    return PsiTreeUtil.getParentOfType(this, *classes.map { it.java }.toTypedArray())
 }
