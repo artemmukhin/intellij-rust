@@ -248,10 +248,7 @@ class MemoryCategorizationContext(
 
             is RsEnumVariant, is RsStructItem, is RsFunction -> processRvalue(pathExpr)
 
-            is RsPatBinding -> {
-                val category = Local(declaration)
-                Cmt(pathExpr, category, MutabilityCategory.from(declaration.mutability), type)
-            }
+            is RsPatBinding -> Cmt(pathExpr, Local(declaration), MutabilityCategory.from(declaration.mutability), type)
 
             is RsSelfParameter -> Cmt(pathExpr, Local(declaration), MutabilityCategory.from(declaration.mutability), type)
 
