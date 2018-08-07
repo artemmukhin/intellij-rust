@@ -124,7 +124,7 @@ class ExprUseVisitor(
             walkIrrefutablePat(parameterCmt, parameterPat)
         }
 
-        body.expr?.let { consumeExpr(it) }
+        walkBlock(body)
     }
 
     fun delegateConsume(element: RsElement, cmt: Cmt) {
