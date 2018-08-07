@@ -7,7 +7,7 @@ package org.rust.lang.core.types.borrowck.gatherLoans
 
 import org.rust.lang.core.psi.*
 import org.rust.lang.core.psi.ext.RsElement
-import org.rust.lang.core.psi.ext.parentOfType
+import org.rust.lang.core.psi.ext.ancestorOrSelf
 import org.rust.lang.core.types.borrowck.*
 import org.rust.lang.core.types.borrowck.MoveReason.*
 import org.rust.lang.core.types.infer.Categorization
@@ -37,7 +37,7 @@ fun getPatternSource(pat: RsPat): PatternSource {
     return when (parent) {
         is RsLetDecl -> PatternSource.LetDeclaration(parent)
         is RsMatchArm -> {
-            val matchExpr = parent.parentOfType<RsMatchExpr>()
+            val matchExpr = parent.ancestorOrSelf<RsMatchExpr>()
             PatternSource.MatchExpr(matchExpr!!)
         }
         else -> PatternSource.Other
