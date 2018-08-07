@@ -25,7 +25,7 @@ import org.rust.lang.core.types.infer.MemoryCategorizationContext
 import org.rust.lang.core.types.regions.*
 
 fun gatherLoansInFn(bccx: BorrowCheckContext, body: RsBlock): Pair<List<Loan>, MoveData> {
-    val glcx = GatherLoanContext(bccx, MoveData(), null, mutableListOf(), Scope.createNode(body))
+    val glcx = GatherLoanContext(bccx, MoveData(), MoveErrorCollector(), mutableListOf(), Scope.createNode(body))
     val visitor = ExprUseVisitor(glcx, MemoryCategorizationContext(bccx.regionScopeTree))
     visitor.consumeBody(bccx.body)
     // glcx.reportPotentialErrors()

@@ -74,7 +74,7 @@ fun gatherMoveFromPat(
     cmt: Cmt
 ) {
     val source = getPatternSource(movePat)
-    val patMovePlace = (movePat as? RsPatIdent)?.let { MovePlace(movePat.patBinding.name) }
+    val patMovePlace = (movePat as? RsPatIdent)?.let { MovePlace(movePat.patBinding, source) }
     val moveInfo = GatherMoveInfo(movePat, MoveKind.MovePat, cmt, patMovePlace)
     gatherMove(bccx, moveData, moveErrorCollector, moveInfo)
 }
