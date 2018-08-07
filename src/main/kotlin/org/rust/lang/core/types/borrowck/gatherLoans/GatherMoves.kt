@@ -7,6 +7,7 @@ package org.rust.lang.core.types.borrowck.gatherLoans
 
 import org.rust.lang.core.psi.*
 import org.rust.lang.core.psi.ext.RsElement
+import org.rust.lang.core.psi.ext.RsStructOrEnumItemElement
 import org.rust.lang.core.psi.ext.ancestorOrSelf
 import org.rust.lang.core.types.borrowck.*
 import org.rust.lang.core.types.borrowck.MoveReason.*
@@ -141,3 +142,5 @@ fun checkAndGetIllegalMoveOrigin(bccx: BorrowCheckContext, cmt: Cmt): Cmt? {
     }
 }
 
+// TODO
+val RsStructOrEnumItemElement.hasDestructor: Boolean get() = true

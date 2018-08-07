@@ -105,6 +105,10 @@ class BorrowCheckContext(
     fun report(error: BorrowCheckError) {
         // TODO
     }
+
+    fun reportAliasabilityViolation(cause: AliasableViolationKind, reason: AliasableReason, cmt: Cmt) {
+        // TODO
+    }
 }
 
 fun borrowck(owner: RsElement): BorrowCheckResult? {

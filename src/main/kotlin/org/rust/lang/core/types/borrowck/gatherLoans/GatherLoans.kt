@@ -23,6 +23,8 @@ import org.rust.lang.core.types.infer.Categorization
 import org.rust.lang.core.types.infer.Cmt
 import org.rust.lang.core.types.infer.MemoryCategorizationContext
 import org.rust.lang.core.types.regions.*
+import org.rust.lang.core.types.ty.Ty
+import org.rust.lang.core.types.ty.TyUnknown
 
 fun gatherLoansInFn(bccx: BorrowCheckContext, body: RsBlock): Pair<List<Loan>, MoveData> {
     val glcx = GatherLoanContext(bccx, MoveData(), MoveErrorCollector(), mutableListOf(), Scope.createNode(body))
@@ -242,3 +244,6 @@ sealed class AliasableViolationKind {
     object MutabilityViolation : AliasableViolationKind()
     class BorrowViolation(val cause: LoanCause) : AliasableViolationKind()
 }
+
+// TODO
+val RsElement.type: Ty get() = TyUnknown
