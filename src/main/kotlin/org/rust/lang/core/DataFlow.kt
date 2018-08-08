@@ -15,9 +15,9 @@ class DataFlowContext<O : DataFlowOperator>(val analysisName: String,
                                             val body: RsBlock,
                                             val cfg: ControlFlowGraph,
                                             val oper: O,
-                                            val bitsPerId: Int) {
+                                            val bitsPerElement: Int) {
     val bitsPerInt: Int = 32
-    val wordsPerId: Int
+    val wordsPerElement: Int
     val gens: MutableList<Int>          //
     val scopeKills: MutableList<Int>    // todo: maybe it's better to use BitSet
     val actionKills: MutableList<Int>   //
@@ -28,21 +28,21 @@ class DataFlowContext<O : DataFlowOperator>(val analysisName: String,
         val nodesCount = cfg.graph.size
         val entry = oper.neutralElement
 
-        this.wordsPerId = (bitsPerId + bitsPerInt - 1) / bitsPerInt
-        this.gens = MutableList(nodesCount * wordsPerId) { 0 }
-        this.actionKills = MutableList(nodesCount * wordsPerId) { 0 }
-        this.scopeKills = MutableList(nodesCount * wordsPerId) { 0 }
-        this.onEntry = MutableList(nodesCount * wordsPerId) { entry }
+        this.wordsPerElement = (bitsPerElement + bitsPerInt - 1) / bitsPerInt
+        this.gens = MutableList(nodesCount * wordsPerElement) { 0 }
+        this.actionKills = MutableList(nodesCount * wordsPerElement) { 0 }
+        this.scopeKills = MutableList(nodesCount * wordsPerElement) { 0 }
+        this.onEntry = MutableList(nodesCount * wordsPerElement) { entry }
         this.localIndexTable = cfg.buildLocalIndex()
     }
 
-    private fun getCfgIndices(element: RsElement) = localIndexTable.getOrDefault(element, mutableListOf())
+    private fun getCfgNodes(element: RsElement) = localIndexTable.getOrDefault(element, mutableListOf())
 
-    private fun hasBitsetForLocalElement(element: RsElement): Boolean = localIndexTable.containsKey(element)
+    private fun hasBitSetForLocalElement(element: RsElement): Boolean = localIndexTable.containsKey(element)
 
     fun computeIdRange(node: CFGNode): Pair<Int, Int> {
-        val start = node.index * wordsPerId
-        val end = start + wordsPerId
+        val start = node.index * wordsPerElement
+        val end = start + wordsPerElement
         return Pair(start, end)
     }
 
@@ -57,14 +57,14 @@ class DataFlowContext<O : DataFlowOperator>(val analysisName: String,
     }
 
     fun addGen(element: RsElement, bit: Int) {
-        getCfgIndices(element).forEach {
+        getCfgNodes(element).forEach {
             val (start, end) = computeIdRange(it)
             setBit(gens.subList(start, end), bit)
         }
     }
 
     fun addKill(kind: KillFrom, element: RsElement, bit: Int) {
-        getCfgIndices(element).forEach {
+        getCfgNodes(element).forEach {
             val (start, end) = computeIdRange(it)
             when (kind) {
                 KillFrom.ScopeEnd -> setBit(scopeKills.subList(start, end), bit)
@@ -83,13 +83,13 @@ class DataFlowContext<O : DataFlowOperator>(val analysisName: String,
     }
 
     fun eachBitOnEntry(element: RsElement, f: (Int) -> Boolean): Boolean {
-        if (!hasBitsetForLocalElement(element)) return true
-        val indices = getCfgIndices(element)
-        return indices.all { eachBitForNode(EntryOrExit.Entry, it, f) }
+        if (!hasBitSetForLocalElement(element)) return true
+        val nodes = getCfgNodes(element)
+        return nodes.all { eachBitForNode(EntryOrExit.Entry, it, f) }
     }
 
     fun eachBitForNode(e: EntryOrExit, node: CFGNode, f: (Int) -> Boolean): Boolean {
-        if (bitsPerId == 0) return true
+        if (bitsPerElement == 0) return true
 
         val (start, end) = computeIdRange(node)
         val onEntry = onEntry.subList(start, end)
@@ -100,6 +100,17 @@ class DataFlowContext<O : DataFlowOperator>(val analysisName: String,
         return eachBit(slice, f)
     }
 
+    fun eachGenBit(element: RsElement, f: (Int) -> Boolean): Boolean {
+        if (!hasBitSetForLocalElement(element)) return true
+        if (bitsPerElement == 0) return true
+
+        val nodes = getCfgNodes(element)
+        return nodes.all {
+            val (start, end) = computeIdRange(it)
+            eachBit(gens.subList(start, end), f)
+        }
+    }
+
     fun eachBit(words: List<Int>, f: (Int) -> Boolean): Boolean {
         words.filter { it != 0 }.forEachIndexed { index, word ->
             val baseIndex = index * bitsPerInt
@@ -107,9 +118,9 @@ class DataFlowContext<O : DataFlowOperator>(val analysisName: String,
                 val bit = 1 shl offset
                 if (word and bit != 0) {
                     val bitIndex = baseIndex + offset
-                    if (bitIndex >= bitsPerId) {
+                    if (bitIndex >= bitsPerElement) {
                         return true
-                    } else if (!f(index)) {
+                    } else if (!f(bitIndex)) {
                         return false
                     }
                 }
@@ -122,7 +133,7 @@ class DataFlowContext<O : DataFlowOperator>(val analysisName: String,
     fun addKillsFromFlowExits() {}
 
     fun propagate() {
-        if (bitsPerId == 0) return
+        if (bitsPerElement == 0) return
 
         val propagationContext = PropagationContext(this, true)
         val nodesInPostOrder = cfg.graph.nodesInPostOrder(cfg.entry)
