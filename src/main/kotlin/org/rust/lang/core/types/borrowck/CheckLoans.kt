@@ -81,18 +81,18 @@ class CheckLoanContext(
     }
 
     fun consumeCommon(element: RsElement, cmt: Cmt, mode: ConsumeMode) {
-        val loanPath = loanPathIsField(cmt).first
-        if (loanPath != null) {
-            val movedValueUseKind =
-                when (mode) {
-                    is ConsumeMode.Copy -> {
-                        checkForCopyOrFrozenPath(element, loanPath)
-                        MovedInUse
-                    }
-                    is ConsumeMode.Move -> {
-
-                    }
-                }
+        val loanPath = loanPathIsField(cmt).first ?: return
+        val movedValueUseKind = when (mode) {
+            is ConsumeMode.Copy -> {
+                checkForCopyOrFrozenPath(element, loanPath)
+                MovedInUse
+            }
+            is ConsumeMode.Move -> {
+                val moveKind = moveData.kindOfMoveOfPath(element, loanPath) ?: MovedInUse
+                checkForMoveOfBorrowedPath(element, loanPath, moveKind)
+                if (moveKind == MoveKind.Captured) MovedInCapture else MovedInUse
+            }
         }
+        checkIfPathIsMoved(element, movedValueUseKind, loanPath)
     }
 }
