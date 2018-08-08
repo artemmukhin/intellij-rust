@@ -142,6 +142,7 @@ class MoveData(
     fun movePath(loanPath: LoanPath): MovePathIndex {
         pathMap[loanPath]?.let { return it }
 
+        val index = paths.size
         val kind = loanPath.kind
         when (kind) {
             is Var, is Upvar -> paths.add(MovePath(loanPath))
@@ -156,7 +157,6 @@ class MoveData(
             }
         }
 
-        val index = paths.size
         testAssert { index == paths.size - 1 }
         pathMap[loanPath] = index
         return index

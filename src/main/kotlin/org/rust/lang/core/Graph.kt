@@ -14,7 +14,7 @@ class Graph<N, E>(
 ) {
     private val nextNodeIndex: Int = nodes.size
     private val nextEdgeIndex: Int = edges.size
-    val size: Int = nodes.size
+    val size: Int get() = nodes.size
 
     fun getNode(index: Int): Node<N, E> =
         nodes[index]

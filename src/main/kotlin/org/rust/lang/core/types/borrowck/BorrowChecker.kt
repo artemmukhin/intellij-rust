@@ -10,6 +10,7 @@ import org.rust.lang.core.DataFlowContext
 import org.rust.lang.core.DataFlowOperator
 import org.rust.lang.core.KillFrom
 import org.rust.lang.core.psi.RsBlock
+import org.rust.lang.core.psi.RsFunction
 import org.rust.lang.core.psi.ext.RsElement
 import org.rust.lang.core.psi.ext.bodyOwnedBy
 import org.rust.lang.core.types.borrowck.LoanPathElement.Deref
@@ -87,6 +88,9 @@ sealed class LoanPathElement {
     data class Deref(val kind: PointerKind) : LoanPathElement()
     data class Interior(val element: RsElement?, val kind: InteriorKind) : LoanPathElement()
 }
+
+fun checkFunction(function: RsFunction): BorrowCheckResult? =
+    borrowck(function)
 
 class BorrowCheckResult(val usedMutNodes: MutableSet<RsElement>)
 
