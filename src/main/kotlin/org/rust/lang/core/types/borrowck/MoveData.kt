@@ -265,8 +265,18 @@ class FlowedMoveData(moveData: MoveData, bccx: BorrowCheckContext, cfg: ControlF
 
     fun kindOfMoveOfPath(element: RsElement, loanPath: LoanPath): MoveKind? {
         val loanPathIndex = moveData.pathMap[loanPath] ?: return null
-        // TODO
-        // dfcxMoves.forEachGenBit(element)
+
+        var result: MoveKind? = null
+        dfcxMoves.eachGenBit(element) { moveIndex ->
+            val move = moveData.moves[moveIndex]
+            if (move.path == loanPathIndex) {
+                result = move.kind
+                false
+            } else {
+                true
+            }
+        }
+        return result
     }
 }
 
