@@ -9,8 +9,8 @@ import org.rust.lang.core.psi.RsBlock
 import org.rust.lang.core.psi.RsPat
 import org.rust.lang.core.psi.ext.RsElement
 import org.rust.lang.core.types.borrowck.*
-import org.rust.lang.core.types.borrowck.gatherLoans.AliasableViolationKind.BorrowViolation
-import org.rust.lang.core.types.borrowck.gatherLoans.AliasableViolationKind.MutabilityViolation
+import org.rust.lang.core.types.borrowck.AliasableViolationKind.BorrowViolation
+import org.rust.lang.core.types.borrowck.AliasableViolationKind.MutabilityViolation
 import org.rust.lang.core.types.borrowck.gatherLoans.RestrictionResult.SafeIf
 import org.rust.lang.core.types.infer.Aliasability.FreelyAliasable
 import org.rust.lang.core.types.infer.Aliasability.NonAliasable
@@ -239,11 +239,6 @@ fun checkMutability(
         false
     }
 
-
-sealed class AliasableViolationKind {
-    object MutabilityViolation : AliasableViolationKind()
-    class BorrowViolation(val cause: LoanCause) : AliasableViolationKind()
-}
 
 // TODO
 val RsElement.type: Ty get() = TyUnknown

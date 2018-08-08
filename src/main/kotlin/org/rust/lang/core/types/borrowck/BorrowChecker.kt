@@ -16,7 +16,6 @@ import org.rust.lang.core.psi.ext.bodyOwnedBy
 import org.rust.lang.core.types.borrowck.LoanPathElement.Deref
 import org.rust.lang.core.types.borrowck.LoanPathElement.Interior
 import org.rust.lang.core.types.borrowck.LoanPathKind.*
-import org.rust.lang.core.types.borrowck.gatherLoans.AliasableViolationKind
 import org.rust.lang.core.types.borrowck.gatherLoans.gatherLoansInFn
 import org.rust.lang.core.types.infer.*
 import org.rust.lang.core.types.infer.outlives.FreeRegionMap
@@ -189,6 +188,16 @@ fun loanPathIsField(cmt: Cmt): Pair<LoanPath?, Boolean> {
 
         null -> Pair(null, false)
     }
+}
+
+sealed class AliasableViolationKind {
+    object MutabilityViolation : AliasableViolationKind()
+    class BorrowViolation(val cause: LoanCause) : AliasableViolationKind()
+}
+
+enum class MovedValueUseKind {
+    MovedInUse,
+    MovedInCapture
 }
 
 sealed class BorrowCheckErrorCode {
