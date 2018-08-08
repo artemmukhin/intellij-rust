@@ -35,47 +35,48 @@ class CFGBuilder(val graph: Graph<CFGNodeData, CFGEdgeData>, val entry: CFGNode,
     }
 
     private fun finishWithAstNode(element: RsElement, pred: CFGNode) =
-        finishWith { addAstNode(element, listOf(pred)) }
+        finishWith { addAstNode(element, pred) }
 
-    private fun withLoopScope(loopScope: LoopScope, callable: () -> Unit) {
+    private inline fun withLoopScope(loopScope: LoopScope, callable: () -> Unit) {
         loopScopes.push(loopScope)
         callable()
         loopScopes.pop()
     }
 
-    private fun addAstNode(element: RsElement, preds: List<CFGNode>): CFGNode =
-        addNode(CFGNodeData.AST(element), preds)
+    private fun addAstNode(element: RsElement, vararg preds: CFGNode): CFGNode =
+        addNode(CFGNodeData.AST(element), *preds)
 
-    private fun addDummyNode(preds: List<CFGNode>): CFGNode =
-        addNode(CFGNodeData.Dummy, preds)
+    private fun addDummyNode(vararg preds: CFGNode): CFGNode =
+        addNode(CFGNodeData.Dummy, *preds)
 
     private fun addUnreachableNode(): CFGNode =
-        addNode(CFGNodeData.Unreachable, emptyList())
+        addNode(CFGNodeData.Unreachable)
 
-    private fun addNode(data: CFGNodeData, preds: List<CFGNode>): CFGNode {
+    private fun addNode(data: CFGNodeData, vararg preds: CFGNode): CFGNode {
         val newNode = graph.addNode(data)
         preds.forEach { addContainedEdge(it, newNode) }
         return newNode
     }
 
     fun addContainedEdge(source: CFGNode, target: CFGNode) {
-        val data = CFGEdgeData(mutableListOf())
+        val data = CFGEdgeData(emptyList())
         graph.addEdge(source, target, data)
     }
 
     private fun addReturningEdge(fromNode: CFGNode) {
-        val data = CFGEdgeData(loopScopes.map { it.loop }.toMutableList())
+        val data = CFGEdgeData(loopScopes.map { it.loop })
         graph.addEdge(fromNode, exit, data)
     }
 
     private fun straightLine(expr: RsExpr, pred: CFGNode, subExprs: List<RsExpr?>): CFGNode {
         val subExprsExit = subExprs.fold(pred) { acc, subExpr -> process(subExpr, acc) }
-        return addAstNode(expr, listOf(subExprsExit))
+        return addAstNode(expr, subExprsExit)
     }
 
     fun process(element: RsElement?, pred: CFGNode): CFGNode {
         if (element == null) return pred
 
+        result = null
         val oldPredsSize = preds.size
         preds.push(pred)
         element.accept(this)
@@ -87,12 +88,12 @@ class CFGBuilder(val graph: Graph<CFGNodeData, CFGEdgeData>, val entry: CFGNode,
 
     private fun allPats(pat: RsPat, subPats: List<RsPat?>): CFGNode {
         val patsExit = subPats.fold(pred) { pred, subPat -> process(subPat, pred) }
-        return addAstNode(pat, listOf(patsExit))
+        return addAstNode(pat, patsExit)
     }
 
-    private fun processCall(callExpr: RsExpr, func: RsExpr?, args: List<RsExpr?>): CFGNode {
-        val funcExit = process(func, pred)
-        return straightLine(callExpr, funcExit, args)
+    private fun processCall(callExpr: RsExpr, funcOrReceiver: RsExpr?, args: List<RsExpr?>): CFGNode {
+        val funcOrReceiverExit = process(funcOrReceiver, pred)
+        return straightLine(callExpr, funcOrReceiverExit, args)
     }
 
     override fun visitBlock(block: RsBlock) {
@@ -138,7 +139,7 @@ class CFGBuilder(val graph: Graph<CFGNodeData, CFGEdgeData>, val entry: CFGNode,
         finishWithAstNode(pathExpr, pred)
 
     override fun visitRangeExpr(rangeExpr: RsRangeExpr) =
-        finishWithAstNode(rangeExpr, pred)
+        finishWith { straightLine(rangeExpr, pred, rangeExpr.exprList) }
 
     override fun visitPatTup(patTup: RsPatTup) =
         finishWith { allPats(patTup, patTup.patList) }
@@ -178,9 +179,9 @@ class CFGBuilder(val graph: Graph<CFGNodeData, CFGEdgeData>, val entry: CFGNode,
 
         if (elseBranch != null) {
             val elseExit = process(elseBranch.block, conditionExit)
-            finishWith { addAstNode(ifExpr, listOf(thenExit, elseExit)) }
+            finishWith { addAstNode(ifExpr, thenExit, elseExit) }
         } else {
-            finishWith { addAstNode(ifExpr, listOf(conditionExit, thenExit)) }
+            finishWith { addAstNode(ifExpr, conditionExit, thenExit) }
         }
     }
 
@@ -199,8 +200,8 @@ class CFGBuilder(val graph: Graph<CFGNodeData, CFGEdgeData>, val entry: CFGNode,
         //   v 3
         // [whileExpr]
         //
-        val loopBack = addDummyNode(listOf(pred))
-        val exprExit = addAstNode(whileExpr, emptyList())
+        val loopBack = addDummyNode(pred)
+        val exprExit = addAstNode(whileExpr)
         val loopScope = LoopScope(whileExpr, loopBack, exprExit)
 
         withLoopScope(loopScope) {
@@ -226,8 +227,8 @@ class CFGBuilder(val graph: Graph<CFGNodeData, CFGEdgeData>, val entry: CFGNode,
         //
         //   [loopExpr] 2
         //
-        val loopBack = addDummyNode(listOf(pred))
-        val exprExit = addAstNode(loopExpr, emptyList())
+        val loopBack = addDummyNode(pred)
+        val exprExit = addAstNode(loopExpr)
         val loopScope = LoopScope(loopExpr, loopBack, exprExit)
 
         withLoopScope(loopScope) {
@@ -239,12 +240,15 @@ class CFGBuilder(val graph: Graph<CFGNodeData, CFGEdgeData>, val entry: CFGNode,
     }
 
     override fun visitForExpr(forExpr: RsForExpr) {
-        val loopBack = addDummyNode(listOf(pred))
-        val exprExit = addAstNode(forExpr, emptyList())
+        val loopBack = addDummyNode(pred)
+        val exprExit = addAstNode(forExpr)
         val loopScope = LoopScope(forExpr, loopBack, exprExit)
 
         withLoopScope(loopScope) {
-            val bodyExit = process(forExpr.block, loopBack)
+            val conditionExit = process(forExpr.expr, loopBack)
+            addContainedEdge(conditionExit, exprExit)
+
+            val bodyExit = process(forExpr.block, conditionExit)
             addContainedEdge(bodyExit, loopBack)
         }
 
@@ -255,7 +259,7 @@ class CFGBuilder(val graph: Graph<CFGNodeData, CFGEdgeData>, val entry: CFGNode,
         if (binaryExpr.binaryOp.isLazy) {
             val leftExit = process(binaryExpr.left, pred)
             val rightExit = process(binaryExpr.right, leftExit)
-            finishWith { addAstNode(binaryExpr, listOf(leftExit, rightExit)) }
+            finishWith { addAstNode(binaryExpr, leftExit, rightExit) }
         } else {
             finishWith { straightLine(binaryExpr, pred, listOf(binaryExpr.left, binaryExpr.right)) }
         }
@@ -264,7 +268,7 @@ class CFGBuilder(val graph: Graph<CFGNodeData, CFGEdgeData>, val entry: CFGNode,
 
     override fun visitRetExpr(retExpr: RsRetExpr) {
         val valueExit = process(retExpr.expr, pred)
-        val returnExit = addAstNode(retExpr, listOf(valueExit))
+        val returnExit = addAstNode(retExpr, valueExit)
         addReturningEdge(returnExit)
         finishWith { addUnreachableNode() }
     }
@@ -291,8 +295,14 @@ class CFGBuilder(val graph: Graph<CFGNodeData, CFGEdgeData>, val entry: CFGNode,
     override fun visitCastExpr(castExpr: RsCastExpr) =
         finishWith { straightLine(castExpr, pred, listOf(castExpr.expr)) }
 
-    override fun visitDotExpr(dotExpr: RsDotExpr) =
-        finishWith { straightLine(dotExpr, pred, listOf(dotExpr.expr)) }
+    override fun visitDotExpr(dotExpr: RsDotExpr) {
+        val methodCall = dotExpr.methodCall
+        if (methodCall == null) {
+            finishWith { straightLine(dotExpr, pred, listOf(dotExpr.expr)) }
+        } else {
+            finishWith { processCall(dotExpr, dotExpr.expr, methodCall.valueArgumentList.exprList) }
+        }
+    }
 
     override fun visitLitExpr(litExpr: RsLitExpr) =
         finishWith { straightLine(litExpr, pred, emptyList()) }
@@ -309,18 +319,18 @@ class CFGBuilder(val graph: Graph<CFGNodeData, CFGEdgeData>, val entry: CFGNode,
         }
 
         val discriminantExit = process(matchExpr.expr, pred)
-        val exprExit = addAstNode(matchExpr, emptyList())
+        val exprExit = addAstNode(matchExpr)
 
         val prevGuards = ArrayDeque<CFGNode>()
 
         matchExpr.matchBody?.matchArmList?.forEach { arm ->
-            val armExit = addDummyNode(emptyList())
+            val armExit = addDummyNode()
 
             arm.patList.forEach { pat ->
                 var patExit = process(pat, discriminantExit)
                 val guard = arm.matchArmGuard
                 if (guard != null) {
-                    val guardStart = addDummyNode(listOf(patExit))
+                    val guardStart = addDummyNode(patExit)
                     patExit = processGuard(guard, prevGuards, guardStart)
                 }
                 addContainedEdge(patExit, armExit)
@@ -333,12 +343,17 @@ class CFGBuilder(val graph: Graph<CFGNodeData, CFGEdgeData>, val entry: CFGNode,
         finishWith(exprExit)
     }
 
+    override fun visitMatchArmGuard(guard: RsMatchArmGuard) {
+        val conditionExit = process(guard.expr, pred)
+        finishWithAstNode(guard, conditionExit)
+    }
+
     override fun visitParenExpr(parenExpr: RsParenExpr) = parenExpr.expr.accept(this)
 
     override fun visitTryExpr(tryExpr: RsTryExpr) {
-        val exprExit = addAstNode(tryExpr, emptyList())
-        val checkExpr = addDummyNode(listOf(pred))
-        val expr = addAstNode(tryExpr.expr, listOf(checkExpr))
+        val exprExit = addAstNode(tryExpr)
+        val expr = process(tryExpr.expr, pred)
+        val checkExpr = addDummyNode(expr)
         addReturningEdge(checkExpr)
         addContainedEdge(expr, exprExit)
         finishWith(exprExit)
