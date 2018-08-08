@@ -18,14 +18,13 @@ import org.rust.lang.core.types.regions.Region
 
 fun checkLoans(
     bccx: BorrowCheckContext,
-    dataFlowLoans: LoanDataFlow,
+    dfcxLoans: LoanDataFlow,
     moveData: FlowedMoveData,
     allLoans: List<Loan>,
     body: RsBlock
 ) {
     val owner = body.descendantsOfType<RsFunction>().firstOrNull() ?: return
-    val clcx = CheckLoanContext()
-
+    val clcx = CheckLoanContext(bccx, dfcxLoans, moveData, allLoans)
 }
 
 class CheckLoanContext(
@@ -54,6 +53,11 @@ class CheckLoanContext(
         }
         checkForConflictingLoans(element)
         checkForLoansAcrossYields(cmt, loanRegion)
+    }
+
+    private fun checkIfPathIsMoved(element: RsElement, useKind: MovedValueUseKind, loanPath: LoanPath) {
+        val baseLoanPath = ownedPatrBasePath(loanPath)
+        moveData.forEachMoveOf
     }
 
     override fun declarationWithoutInit(element: RsElement) {}

@@ -234,8 +234,8 @@ class MoveData(
 
 class FlowedMoveData(moveData: MoveData, bccx: BorrowCheckContext, cfg: ControlFlowGraph, body: RsBlock) {
     val moveData: MoveData
-    val dataFlowMoves: MoveDataFlow
-    val dataFlowAssign: AssignDataFlow
+    val dfcxMoves: MoveDataFlow
+    val dfcxAssign: AssignDataFlow
 
     init {
         val dfcxMoves = DataFlowContext(
@@ -259,8 +259,14 @@ class FlowedMoveData(moveData: MoveData, bccx: BorrowCheckContext, cfg: ControlF
         dfcxAssign.propagate()
 
         this.moveData = moveData
-        this.dataFlowMoves = dfcxMoves
-        this.dataFlowAssign = dfcxAssign
+        this.dfcxMoves = dfcxMoves
+        this.dfcxAssign = dfcxAssign
+    }
+
+    fun kindOfMoveOfPath(element: RsElement, loanPath: LoanPath): MoveKind? {
+        val loanPathIndex = moveData.pathMap[loanPath] ?: return null
+        // TODO
+        // dfcxMoves.forEachGenBit(element)
     }
 }
 
