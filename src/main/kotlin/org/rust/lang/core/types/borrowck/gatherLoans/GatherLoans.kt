@@ -5,8 +5,7 @@
 
 package org.rust.lang.core.types.borrowck.gatherLoans
 
-import org.rust.lang.core.psi.RsBlock
-import org.rust.lang.core.psi.RsPat
+import org.rust.lang.core.psi.*
 import org.rust.lang.core.psi.ext.RsElement
 import org.rust.lang.core.types.borrowck.*
 import org.rust.lang.core.types.borrowck.AliasableViolationKind.BorrowViolation
@@ -25,6 +24,7 @@ import org.rust.lang.core.types.infer.MemoryCategorizationContext
 import org.rust.lang.core.types.regions.*
 import org.rust.lang.core.types.ty.Ty
 import org.rust.lang.core.types.ty.TyUnknown
+import org.rust.lang.core.types.type
 
 fun gatherLoansInFn(bccx: BorrowCheckContext, body: RsBlock): Pair<List<Loan>, MoveData> {
     val glcx = GatherLoanContext(bccx, MoveData(), MoveErrorCollector(), mutableListOf(), Scope.createNode(body))
@@ -240,5 +240,10 @@ fun checkMutability(
     }
 
 
-// TODO
-val RsElement.type: Ty get() = TyUnknown
+val RsElement.type: Ty
+    get() = when (this) {
+        is RsExpr -> this.type
+        is RsExprStmt -> expr.type
+        is RsPatBinding -> this.type
+        else -> TyUnknown
+    }
