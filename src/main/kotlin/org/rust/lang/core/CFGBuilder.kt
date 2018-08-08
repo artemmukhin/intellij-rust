@@ -10,7 +10,7 @@ import org.rust.lang.core.psi.ext.RsElement
 import org.rust.lang.core.types.isLazy
 import java.util.*
 
-class CFGBuilder(val graph: CFGGraph, val entry: CFGNode, val exit: CFGNode) : RsVisitor() {
+class CFGBuilder(val graph: Graph<CFGNodeData, CFGEdgeData>, val entry: CFGNode, val exit: CFGNode) : RsVisitor() {
     class BlockScope(val block: RsBlock, val breakNode: CFGNode)
 
     class LoopScope(val loop: RsExpr, val continueNode: CFGNode, val breakNode: CFGNode)
@@ -33,6 +33,9 @@ class CFGBuilder(val graph: CFGGraph, val entry: CFGNode, val exit: CFGNode) : R
     private fun finishWith(value: CFGNode) {
         result = value
     }
+
+    private fun finishWithAstNode(element: RsElement, pred: CFGNode) =
+        finishWith { addAstNode(element, listOf(pred)) }
 
     private fun withLoopScope(loopScope: LoopScope, callable: () -> Unit) {
         loopScopes.push(loopScope)
@@ -92,20 +95,19 @@ class CFGBuilder(val graph: CFGGraph, val entry: CFGNode, val exit: CFGNode) : R
         return straightLine(callExpr, funcExit, args)
     }
 
-
     override fun visitBlock(block: RsBlock) {
         val stmtsExit = block.stmtList.fold(pred) { pred, stmt -> process(stmt, pred) }
         val blockExpr = block.expr
         val exprExit = process(blockExpr, stmtsExit)
 
-        finishWith { addAstNode(block, listOf(exprExit)) }
+        finishWithAstNode(block, exprExit)
     }
 
     override fun visitLetDecl(letDecl: RsLetDecl) {
         val initExit = process(letDecl.expr, pred)
         val exit = process(letDecl.pat, initExit)
 
-        finishWith { addAstNode(letDecl, listOf(exit)) }
+        finishWithAstNode(letDecl, exit)
     }
 
     override fun visitFieldDecl(fieldDecl: RsFieldDecl) = finishWith(pred)
@@ -114,29 +116,29 @@ class CFGBuilder(val graph: CFGGraph, val entry: CFGNode, val exit: CFGNode) : R
 
     override fun visitExprStmt(exprStmt: RsExprStmt) {
         val exit = process(exprStmt.expr, pred)
-        finishWith { addAstNode(exprStmt, listOf(exit)) }
+        finishWithAstNode(exprStmt, exit)
     }
 
     override fun visitPatBinding(patBinding: RsPatBinding) =
-        finishWith { addAstNode(patBinding, listOf(pred)) }
+        finishWithAstNode(patBinding, pred)
 
     override fun visitPatIdent(patIdent: RsPatIdent) =
-        finishWith { addAstNode(patIdent, listOf(pred)) }
+        finishWithAstNode(patIdent, pred)
 
     override fun visitPatRange(patRange: RsPatRange) =
-        finishWith { addAstNode(patRange, listOf(pred)) }
+        finishWithAstNode(patRange, pred)
 
     override fun visitPatConst(patConst: RsPatConst) =
-        finishWith { addAstNode(patConst, listOf(pred)) }
+        finishWithAstNode(patConst, pred)
 
     override fun visitPatWild(patWild: RsPatWild) =
-        finishWith { addAstNode(patWild, listOf(pred)) }
+        finishWithAstNode(patWild, pred)
 
     override fun visitPathExpr(pathExpr: RsPathExpr) =
-        finishWith { addAstNode(pathExpr, listOf(pred)) }
+        finishWithAstNode(pathExpr, pred)
 
     override fun visitRangeExpr(rangeExpr: RsRangeExpr) =
-        finishWith { addAstNode(rangeExpr, listOf(pred)) }
+        finishWithAstNode(rangeExpr, pred)
 
     override fun visitPatTup(patTup: RsPatTup) =
         finishWith { allPats(patTup, patTup.patList) }
@@ -152,7 +154,7 @@ class CFGBuilder(val graph: CFGGraph, val entry: CFGNode, val exit: CFGNode) : R
 
     override fun visitBlockExpr(blockExpr: RsBlockExpr) {
         val blockExit = process(blockExpr.block, pred)
-        finishWith { addAstNode(blockExpr, listOf(blockExit)) }
+        finishWithAstNode(blockExpr, blockExit)
     }
 
     override fun visitIfExpr(ifExpr: RsIfExpr) {

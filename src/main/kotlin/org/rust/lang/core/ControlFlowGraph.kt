@@ -5,6 +5,7 @@
 
 package org.rust.lang.core
 
+import com.intellij.psi.PsiElement
 import org.rust.lang.core.psi.*
 import org.rust.lang.core.psi.ext.RsElement
 import org.rust.lang.core.psi.ext.ancestors
@@ -48,7 +49,7 @@ typealias CFGNode = Node<CFGNodeData, CFGEdgeData>
 typealias CFGEdge = Edge<CFGNodeData, CFGEdgeData>
 
 class ControlFlowGraph(body: RsBlock) {
-    val graph: CFGGraph = Graph()
+    val graph: Graph<CFGNodeData, CFGEdgeData> = Graph()
     val owner: RsElement
     val entry: CFGNode
     val exit: CFGNode
@@ -88,35 +89,35 @@ class ControlFlowGraph(body: RsBlock) {
 
         graph.forEachNode { node ->
             val element = node.data.element
-            if (element != null)
-                table.getOrPut(element, ::mutableListOf).add(node)
+            if (element != null) table.getOrPut(element, ::mutableListOf).add(node)
         }
 
         return table
     }
 
     fun depthFirstTraversalTrace(): String =
-        graph.depthFirstTraversal(this.entry).map { it.data.text }.joinToString("\n")
+        graph.depthFirstTraversal(this.entry).joinToString("\n") { it.data.text }
 
 
     /**
      * Creates graph description written in the DOT language.
      * Usage: copy the output into `cfg.dot` file and run `dot -Tpng cfg.dot -o cfg.png`
      */
-    fun createDotDescription(): String {
-        val sb = StringBuilder()
-        sb.append("digraph {\n")
-        graph.forEachEdge { edge ->
-            val source = edge.source
-            val target = edge.target
-            val sourceNode = source.data
-            val targetNode = target.data
+    fun createDotDescription(): String =
+        buildString {
+            append("digraph {\n")
 
-            sb.append("    \"${source.index}: ${sourceNode.text}\" -> \"${target.index}: ${targetNode.text}\";\n")
+            graph.forEachEdge { edge ->
+                val source = edge.source
+                val target = edge.target
+                val sourceNode = source.data
+                val targetNode = target.data
+
+                append("    \"${source.index}: ${sourceNode.text}\" -> \"${target.index}: ${targetNode.text}\";\n")
+            }
+
+            append("}\n")
         }
-        sb.append("}\n")
-        return sb.toString()
-    }
 }
 
 
@@ -128,8 +129,13 @@ sealed class ExitPoint {
     class TailStatement(val stmt: RsExprStmt) : ExitPoint()
 
     companion object {
-        fun process(fn: RsFunction, sink: (ExitPoint) -> Unit) = fn.block?.acceptChildren(ExitPointVisitor(sink))
-        fun process(fn: RsLambdaExpr, sink: (ExitPoint) -> Unit) = fn.expr?.acceptChildren(ExitPointVisitor(sink))
+        fun process(fn: RsFunction, sink: (ExitPoint) -> Unit) {
+            fn.block?.acceptChildren(ExitPointVisitor(sink))
+        }
+
+        fun process(fn: RsLambdaExpr, sink: (ExitPoint) -> Unit) {
+            fn.expr?.acceptChildren(ExitPointVisitor(sink))
+        }
     }
 }
 
@@ -167,12 +173,17 @@ private class ExitPointVisitor(
     override fun visitExprStmt(exprStmt: RsExprStmt) {
         exprStmt.acceptChildren(this)
         val block = exprStmt.parent as? RsBlock ?: return
-        if (!(block.expr == null && block.stmtList.lastOrNull() == exprStmt)) return
+        if (block.expr != null) return
+        if (block.stmtList.lastOrNull() != exprStmt) return
+
         val parent = block.parent
-        if ((parent is RsFunction || parent is RsExpr && parent.isInTailPosition) && exprStmt.expr.type != TyNever) {
+        if (isTailStatement(parent, exprStmt)) {
             sink(ExitPoint.TailStatement(exprStmt))
         }
     }
+
+    private fun isTailStatement(parent: PsiElement?, exprStmt: RsExprStmt) =
+        (parent is RsFunction || parent is RsExpr && parent.isInTailPosition) && exprStmt.expr.type != TyNever
 
     private val RsExpr.isInTailPosition: Boolean
         get() {

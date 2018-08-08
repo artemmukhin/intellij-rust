@@ -61,10 +61,10 @@ class Graph<N, E>(
         }
 
     fun forEachNode(f: (Node<N, E>) -> Unit) =
-        nodes.forEach { node -> f(node) }
+        nodes.forEach { f(it) }
 
     fun forEachEdge(f: (Edge<N, E>) -> Unit) =
-        edges.forEach { edge -> f(edge) }
+        edges.forEach { f(it) }
 
     fun depthFirstTraversal(startNode: Node<N, E>, direction: Direction = Direction.OUTGOING): Sequence<Node<N, E>> {
         val visited = mutableSetOf(startNode)
@@ -94,8 +94,8 @@ class Graph<N, E>(
         }
 
         val nodesWithEntry = listOf(entryNode) + nodes
-        nodesWithEntry.forEach {
-            pushNode(it)
+        for (node in nodesWithEntry) {
+            pushNode(node)
             while (stack.isNotEmpty()) {
                 val (node, iter) = stack.pop()
                 val child = iter.nextOrNull()
