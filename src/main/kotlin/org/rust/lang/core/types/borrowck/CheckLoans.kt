@@ -15,6 +15,7 @@ import org.rust.lang.core.types.borrowck.MovedValueUseKind.MovedInUse
 import org.rust.lang.core.types.infer.BorrowKind
 import org.rust.lang.core.types.infer.Cmt
 import org.rust.lang.core.types.regions.Region
+import org.rust.openapiext.testAssert
 
 fun checkLoans(
     bccx: BorrowCheckContext,
@@ -52,7 +53,58 @@ class CheckLoanContext(
             checkIfPathIsMoved(element, movedValueUseKind, loanPath)
         }
         checkForConflictingLoans(element)
-        checkForLoansAcrossYields(cmt, loanRegion)
+        // checkForLoansAcrossYields(cmt, loanRegion)
+    }
+
+    private fun checkForConflictingLoans(element: RsElement) {
+        val newLoanIndices = loansGeneratedBy(element)
+
+        for (newLoanIndex in newLoanIndices) {
+            eachIssuedLoan(element) { issuedLoan ->
+                val newLoan = allLoans[newLoanIndex]
+                reportErrorIfLoansConflict(issuedLoan, newLoan)
+            }
+        }
+
+        for ((i, newLoanIndex) in newLoanIndices.withIndex()) {
+            val oldLoan = allLoans[newLoanIndex]
+            for (index in newLoanIndices.drop(i)) {
+                val newLoan = allLoans[index]
+                reportErrorIfLoansConflict(oldLoan, newLoan)
+            }
+        }
+
+    }
+
+    /** Checks whether [oldLoan] and [newLoan] can safely be issued simultaneously. */
+    private fun reportErrorIfLoansConflict(oldLoan: Loan, newLoan: Loan): Boolean {
+        // Should only be called for loans that are in scope at the same time.
+        testAssert { bccx.regionScopeTree.areScopesIntersect(oldLoan.killScope, newLoan.killScope) }
+
+        val errorOldNew = reportErrorIfLoanConflictsWithRestriction(oldLoan, newLoan, oldLoan, newLoan)
+        val errorNewOld = reportErrorIfLoanConflictsWithRestriction(newLoan, oldLoan, oldLoan, newLoan)
+
+        if (errorOldNew != null && errorNewOld != null) {
+            errorOldNew.error.emit()
+            errorNewOld.error.cancel()
+        } else if (errorOldNew != null) {
+            errorOldNew.error.emit()
+        } else if (errorNewOld != null) {
+            errorNewOld.error.emit()
+        } else {
+            return true
+        }
+
+        return false
+    }
+
+    private fun eachIssuedLoan(element: RsElement, op: (Loan) -> Boolean): Boolean =
+        dfcxLoans.eachBitOnEntry(element) { op(allLoans[it]) }
+
+    private fun loansGeneratedBy(element: RsElement): List<Int> {
+        val result = mutableListOf<Int>()
+        dfcxLoans.eachGenBit(element) { result.add(it) }
+        return result
     }
 
     private fun checkIfPathIsMoved(element: RsElement, useKind: MovedValueUseKind, loanPath: LoanPath) {
