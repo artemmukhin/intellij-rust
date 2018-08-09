@@ -8,6 +8,30 @@ package org.rust.lang.core
 import org.rust.lang.RsTestBase
 
 class RsGraphTest : RsTestBase() {
+    fun `test graph depth traversal 1`() {
+        val graph = simpleGraph1()
+        val depthFirst = graph.depthFirstTraversal(graph.getNode(0)).map { it.data }.joinToString(" ")
+        checkGraphTraversal(depthFirst, "1 2 3")
+    }
+
+    fun `test graph depth traversal 2`() {
+        val graph = simpleGraph2()
+        val depthFirst = graph.depthFirstTraversal(graph.getNode(0)).map { it.data }.joinToString(" ")
+        checkGraphTraversal(depthFirst, "1 2 5 6 4")
+    }
+
+    fun `test graph postorder 1`() {
+        val graph = simpleGraph1()
+        val postorder = graph.nodesInPostOrder(graph.getNode(0)).map { it.data }.joinToString(" ")
+        checkGraphTraversal(postorder, "3 2 1 4")
+    }
+
+    fun `test graph postorder 2`() {
+        val graph = simpleGraph2()
+        val postorder = graph.nodesInPostOrder(graph.getNode(0)).map { it.data }.joinToString(" ")
+        checkGraphTraversal(postorder, "6 5 2 4 1 3")
+    }
+
     private fun checkGraphTraversal(actual: String, expected: String) {
         check(actual == expected) { "Expected: $expected, found: $actual" }
     }
@@ -38,29 +62,5 @@ class RsGraphTest : RsTestBase() {
         graph.addEdge(4, 5, "h")
 
         return graph
-    }
-
-    fun `test graph depth traversal 1`() {
-        val graph = simpleGraph1()
-        val depthFirst = graph.depthFirstTraversal(graph.getNode(0)).map { it.data }.joinToString(" ")
-        checkGraphTraversal(depthFirst, "1 2 3")
-    }
-
-    fun `test graph depth traversal 2`() {
-        val graph = simpleGraph2()
-        val depthFirst = graph.depthFirstTraversal(graph.getNode(0)).map { it.data }.joinToString(" ")
-        checkGraphTraversal(depthFirst, "1 2 5 6 4")
-    }
-
-    fun `test graph postorder 1`() {
-        val graph = simpleGraph1()
-        val postorder = graph.nodesInPostOrder(graph.getNode(0)).map { it.data }.joinToString(" ")
-        checkGraphTraversal(postorder, "3 2 1 4")
-    }
-
-    fun `test graph postorder 2`() {
-        val graph = simpleGraph2()
-        val postorder = graph.nodesInPostOrder(graph.getNode(0)).map { it.data }.joinToString(" ")
-        checkGraphTraversal(postorder, "6 5 2 4 1 3")
     }
 }

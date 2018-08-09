@@ -12,8 +12,8 @@ class Graph<N, E>(
     private val nodes: MutableList<Node<N, E>> = mutableListOf(),
     private val edges: MutableList<Edge<N, E>> = mutableListOf()
 ) {
-    private val nextNodeIndex: Int = nodes.size
-    private val nextEdgeIndex: Int = edges.size
+    private val nextNodeIndex: Int get() = nodes.size
+    private val nextEdgeIndex: Int get() = edges.size
     val size: Int get() = nodes.size
 
     fun getNode(index: Int): Node<N, E> =
@@ -98,8 +98,8 @@ class Graph<N, E>(
         }
 
         val nodesWithEntry = listOf(entryNode) + nodes
-        for (node in nodesWithEntry) {
-            pushNode(node)
+        for (nextNode in nodesWithEntry) {
+            pushNode(nextNode)
             while (stack.isNotEmpty()) {
                 val (node, iter) = stack.pop()
                 val child = iter.nextOrNull()

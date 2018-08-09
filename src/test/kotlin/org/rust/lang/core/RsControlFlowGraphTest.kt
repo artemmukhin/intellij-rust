@@ -12,16 +12,6 @@ import org.rust.lang.core.psi.RsBlock
 import org.rust.lang.core.psi.ext.descendantsOfType
 
 class RsControlFlowGraphTest : RsTestBase() {
-
-    protected fun testCFG(@Language("Rust") code: String, expectedIndented: String) {
-        InlineFile(code)
-        val block = myFixture.file.descendantsOfType<RsBlock>().firstOrNull() ?: return
-        val cfg = ControlFlowGraph(block)
-        val expected = expectedIndented.trimIndent()
-        val actual = cfg.depthFirstTraversalTrace()
-        check(actual == expected) { throw ComparisonFailure("Comparision failed", expected, actual) }
-    }
-
     fun `test empty block`() = testCFG("""
         fn main() {}
     """, """
@@ -33,19 +23,36 @@ class RsControlFlowGraphTest : RsTestBase() {
 
     fun `test straightforward`() = testCFG("""
         fn main() {
-            let x = 1;
-            let mut y = 2;
+            let x = (1 + 2);
+            let arr = [0, 5 * 7 + x];
+            let mut y = -arr[x + 10];
             f(x, y);
             y += x;
         }
     """, """
         Entry
         1
-        x
-        let x = 1;
         2
+        1 + 2
+        x
+        let x = (1 + 2);
+        0
+        5
+        7
+        5 * 7
+        x
+        5 * 7 + x
+        [0, 5 * 7 + x]
+        arr
+        let arr = [0, 5 * 7 + x];
+        arr
+        x
+        10
+        x + 10
+        arr[x + 10]
+        -arr[x + 10]
         mut y
-        let mut y = 2;
+        let mut y = -arr[x + 10];
         f
         x
         y
@@ -63,7 +70,7 @@ class RsControlFlowGraphTest : RsTestBase() {
     fun `test if else with unreachable`() = testCFG("""
         fn main() {
             let x = 1;
-            if x > 0 { return; } else { return; }
+            if x > 0 && x < 10 { return; } else { return; }
             let y = 2;
         }
     """, """
@@ -74,9 +81,31 @@ class RsControlFlowGraphTest : RsTestBase() {
         x
         0
         x > 0
+        x
+        10
+        x < 10
+        x > 0 && x < 10
         return
         Exit
         return
+    """
+    )
+
+    fun `test loop`() = testCFG("""
+        fn main() {
+            loop {
+                x += 1;
+            }
+            y;
+        }
+    """, """
+        Entry
+        Dummy
+        x
+        1
+        x += 1
+        x += 1;
+        BLOCK
     """
     )
 
@@ -158,6 +187,43 @@ class RsControlFlowGraphTest : RsTestBase() {
     """
     )
 
+    fun `test for`() = testCFG("""
+        fn main() {
+            for i in x.foo(42) {
+                for j in 0..x.bar.foo {
+                    x += i;
+                }
+            }
+            y;
+        }
+    """, """
+        Entry
+        Dummy
+        x
+        42
+        x.foo(42)
+        FOR
+        FOR;
+        y
+        y;
+        BLOCK
+        Exit
+        Dummy
+        0
+        x
+        x.bar
+        x.bar.foo
+        0..x.bar.foo
+        FOR
+        BLOCK
+        x
+        i
+        x += i
+        x += i;
+        BLOCK
+    """
+    )
+
     fun `test match`() = testCFG("""
         enum E { A, B(i32), C }
         fn main() {
@@ -207,7 +273,7 @@ class RsControlFlowGraphTest : RsTestBase() {
         fn main() {
             let x = E::A(1);
             match x {
-                E::A(val) => val,
+                E::A(val) if val > 0 => val,
                 E::B => return,
             };
             let y = 0;
@@ -222,6 +288,11 @@ class RsControlFlowGraphTest : RsTestBase() {
         x
         val
         E::A(val)
+        Dummy
+        val
+        0
+        val > 0
+        if val > 0
         Dummy
         val
         MATCH
@@ -239,22 +310,49 @@ class RsControlFlowGraphTest : RsTestBase() {
 
     fun `test try`() = testCFG("""
         fn main() {
-            x;
-            expr?;
+            x.foo(a, b)?;
             y;
         }
     """, """
         Entry
         x
-        x;
+        a
+        b
+        x.foo(a, b)
         Dummy
-        expr
-        expr?
-        expr?;
+        Exit
+        x.foo(a, b)?
+        x.foo(a, b)?;
         y
         y;
+        BLOCK
+    """
+    )
+
+    fun `test tuple`() = testCFG("""
+        fn main() {
+            let x = (1, (2, 3));
+        }
+    """, """
+        Entry
+        1
+        2
+        3
+        (2, 3)
+        (1, (2, 3))
+        x
+        let x = (1, (2, 3));
         BLOCK
         Exit
     """
     )
+
+    protected fun testCFG(@Language("Rust") code: String, expectedIndented: String) {
+        InlineFile(code)
+        val block = myFixture.file.descendantsOfType<RsBlock>().firstOrNull() ?: return
+        val cfg = ControlFlowGraph.buildFor(block)
+        val expected = expectedIndented.trimIndent()
+        val actual = cfg.depthFirstTraversalTrace()
+        check(actual == expected) { throw ComparisonFailure("Comparision failed", expected, actual) }
+    }
 }

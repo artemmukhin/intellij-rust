@@ -42,32 +42,32 @@ sealed class CFGNodeData(val element: RsElement? = null) {
         }
 }
 
-class CFGEdgeData(val exitingScopes: MutableList<RsElement>)
+class CFGEdgeData(val exitingScopes: List<RsElement>)
 
 typealias CFGGraph = Graph<CFGNodeData, CFGEdgeData>
 typealias CFGNode = Node<CFGNodeData, CFGEdgeData>
 typealias CFGEdge = Edge<CFGNodeData, CFGEdgeData>
 
-class ControlFlowGraph(body: RsBlock) {
-    val graph: Graph<CFGNodeData, CFGEdgeData> = Graph()
-    val owner: RsElement
-    val entry: CFGNode
+class ControlFlowGraph private constructor(
+    val owner: RsElement,
+    val graph: Graph<CFGNodeData, CFGEdgeData>,
+    val body: RsBlock,
+    val entry: CFGNode,
     val exit: CFGNode
+) {
+    companion object {
+        fun buildFor(body: RsBlock): ControlFlowGraph {
+            val owner = body.parent as RsElement
+            val graph = Graph<CFGNodeData, CFGEdgeData>()
+            val entry = graph.addNode(CFGNodeData.Entry)
+            val fnExit = graph.addNode(CFGNodeData.Exit)
 
-    private val fnExit: CFGNode
-    private val body: RsBlock
+            val cfgBuilder = CFGBuilder(graph, entry, fnExit)
+            val bodyExit = cfgBuilder.process(body, entry)
+            cfgBuilder.addContainedEdge(bodyExit, fnExit)
 
-    init {
-        this.entry = graph.addNode(CFGNodeData.Entry)
-        this.owner = body.parent as RsElement
-        this.fnExit = graph.addNode(CFGNodeData.Exit)
-
-        val cfgBuilder = CFGBuilder(graph, entry, fnExit)
-        val bodyExit = cfgBuilder.process(body, entry)
-        cfgBuilder.addContainedEdge(bodyExit, fnExit)
-
-        this.exit = fnExit
-        this.body = body
+            return ControlFlowGraph(owner, graph, body, entry, fnExit)
+        }
     }
 
     fun isNodeReachable(item: RsElement) = graph.depthFirstTraversal(entry).any { it.data.element == item }
