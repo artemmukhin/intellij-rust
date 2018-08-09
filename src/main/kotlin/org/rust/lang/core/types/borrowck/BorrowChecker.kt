@@ -132,7 +132,7 @@ fun buildBorrowckDataflowData(bccx: BorrowCheckContext, forceAnalysis: Boolean, 
     val (allLoans, moveData) = gatherLoansInFn(bccx, body)
     if (!forceAnalysis && allLoans.isEmpty() && moveData.isEmpty()) return null
 
-    val cfg = ControlFlowGraph(body)
+    val cfg = ControlFlowGraph.buildFor(body)
     val loanDfcx = DataFlowContext("borrowck", body, cfg, LoanDataFlowOperator, allLoans.size)
 
     allLoans.forEachIndexed { i, loan ->

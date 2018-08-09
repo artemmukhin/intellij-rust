@@ -230,6 +230,35 @@ class MoveData(
             addAssignmentHelper(loanPath)
         }
     }
+
+    fun existingBasePaths(loanPath: LoanPath): List<MovePathIndex> {
+        val result = mutableListOf<MovePathIndex>()
+        addExistingBasePaths(loanPath, result)
+        return result
+    }
+
+    /// Adds any existing move path indices for `loanPath` and any base paths of `loanPath` to `result`,
+    /// but doesn't add new move paths
+    fun addExistingBasePaths(loanPath: LoanPath, result: MutableList<MovePathIndex>) {
+        val index = pathMap[loanPath]
+        if (index != null) {
+            eachBasePath(index) { result.add(it) }
+        } else {
+            val kind = loanPath.kind
+            when (kind) {
+                is Downcast -> addExistingBasePaths(kind.loanPath, result)
+                is Extend -> addExistingBasePaths(kind.loanPath, result)
+            }
+        }
+    }
+
+    fun eachBasePath(index: MovePathIndex, f: (MovePathIndex) -> Boolean): Boolean {
+        var p = index
+        while (true) {
+            if (!f(p)) return false
+            p = paths[p].parent ?: return true
+        }
+    }
 }
 
 class FlowedMoveData(moveData: MoveData, bccx: BorrowCheckContext, cfg: ControlFlowGraph, body: RsBlock) {
@@ -277,6 +306,40 @@ class FlowedMoveData(moveData: MoveData, bccx: BorrowCheckContext, cfg: ControlF
             }
         }
         return result
+    }
+
+    fun eachMoveOf(element: RsElement, loanPath: LoanPath, f: (Move, LoanPath) -> Boolean): Boolean {
+        // Bad scenarios:
+        // 1. Move of `a.b.c`, use of `a.b.c`
+        // 2. Move of `a.b.c`, use of `a.b.c.d`
+        // 3. Move of `a.b.c`, use of `a` or `a.b`
+        //
+        // OK scenario:
+        // 4. move of `a.b.c`, use of `a.b.d`
+
+        val baseNodes: List<MovePathIndex> = moveData.existingBasePaths(loanPath)
+        if (baseNodes.isEmpty()) return true
+
+        val loanPathIndex = moveData.pathMap[loanPath]
+
+        var result = true
+        return dfcxMoves.eachBitOnEntry(element) { index ->
+            val move = moveData.moves[index]
+            val movedPath = move.path
+            if (baseNodes.any { it == movedPath }) {
+                // Scenario 1 or 2: `loanPath` or some base path of `loanPath` was moved.
+                if (!f(move, moveData.paths[movedPath].loanPath)) {
+                    result = false
+                }
+            } else if (loanPathIndex != null) {
+                val cont = moveData.eachBasePath(movedPath) {
+                    // Scenario 3: some extension of `loanPath` was moved
+                    if (it == loanPathIndex) f(move, moveData.paths[movedPath].loanPath) else true
+                }
+                if (!cont) result = false
+            }
+            result
+        }
     }
 }
 

@@ -56,8 +56,11 @@ class CheckLoanContext(
     }
 
     private fun checkIfPathIsMoved(element: RsElement, useKind: MovedValueUseKind, loanPath: LoanPath) {
-        val baseLoanPath = ownedPatrBasePath(loanPath)
-        moveData.forEachMoveOf
+        val baseLoanPath = ownedPtrBasePath(loanPath)
+        moveData.eachMoveOf(element, baseLoanPath) { move, movedLp ->
+            bccx.reportUseOfMovedValue(useKind, loanPath, move, movedLp)
+            false
+        }
     }
 
     override fun declarationWithoutInit(element: RsElement) {}
@@ -99,4 +102,8 @@ class CheckLoanContext(
         }
         checkIfPathIsMoved(element, movedValueUseKind, loanPath)
     }
+}
+
+fun ownedPtrBasePath(loanPath: LoanPath): LoanPath {
+
 }
