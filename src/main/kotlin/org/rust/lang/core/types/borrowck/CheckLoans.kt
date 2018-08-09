@@ -35,7 +35,7 @@ fun checkLoans(
 
 sealed class UseError {
     object OK : UseError()
-    class WhileBorrowed(loanPath: LoanPath) : UseError()
+    class WhileBorrowed(val loanPath: LoanPath) : UseError()
 }
 
 class CheckLoanContext(
