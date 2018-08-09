@@ -15,6 +15,7 @@ import org.rust.lang.core.types.borrowck.MovedValueUseKind.MovedInUse
 import org.rust.lang.core.types.infer.BorrowKind
 import org.rust.lang.core.types.infer.Cmt
 import org.rust.lang.core.types.regions.Region
+import org.rust.lang.core.types.regions.Scope
 import org.rust.openapiext.testAssert
 
 fun checkLoans(
@@ -26,6 +27,11 @@ fun checkLoans(
 ) {
     val owner = body.descendantsOfType<RsFunction>().firstOrNull() ?: return
     val clcx = CheckLoanContext(bccx, dfcxLoans, moveData, allLoans)
+}
+
+sealed class UseError {
+    object OK : UseError()
+    class WhileBorrowed(loanPath: LoanPath) : UseError()
 }
 
 class CheckLoanContext(
@@ -108,7 +114,7 @@ class CheckLoanContext(
     }
 
     private fun checkIfPathIsMoved(element: RsElement, useKind: MovedValueUseKind, loanPath: LoanPath) {
-        val baseLoanPath = ownedPtrBasePath(loanPath)
+        val baseLoanPath = loanPath
         moveData.eachMoveOf(element, baseLoanPath) { move, movedLp ->
             bccx.reportUseOfMovedValue(useKind, loanPath, move, movedLp)
             false
@@ -154,8 +160,25 @@ class CheckLoanContext(
         }
         checkIfPathIsMoved(element, movedValueUseKind, loanPath)
     }
-}
 
-fun ownedPtrBasePath(loanPath: LoanPath): LoanPath {
+    private fun checkForCopyOrFrozenPath(element: RsElement, copyPath: LoanPath) {
+        val error = analyzeRestrictionsOnUse(element, copyPath, BorrowKind.ImmutableBorrow)
+        if (error is UseError.WhileBorrowed) {
 
+        }
+    }
+
+    private fun analyzeRestrictionsOnUse(element: RsElement, usePath: LoanPath, borrowKind: BorrowKind): UseError {
+        var result: UseError = UseError.OK
+        eachInScopeLoanAffectingPath(Scope.createNode(element), usePath) { loan ->
+            if (!compatibleBorrowKinds(loan.kind, borrowKind)) {
+                result = UseError.WhileBorrowed(loan.loanPath)
+                false
+            } else {
+                true
+            }
+        }
+
+        return result
+    }
 }
