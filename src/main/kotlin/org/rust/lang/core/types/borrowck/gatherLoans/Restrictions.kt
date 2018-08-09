@@ -8,10 +8,10 @@ package org.rust.lang.core.types.borrowck.gatherLoans
 import org.rust.lang.core.psi.RsStructItem
 import org.rust.lang.core.psi.ext.namedFields
 import org.rust.lang.core.types.borrowck.*
+import org.rust.lang.core.types.borrowck.AliasableViolationKind.BorrowViolation
 import org.rust.lang.core.types.borrowck.BorrowCheckErrorCode.BorrowedPointerTooShort
 import org.rust.lang.core.types.borrowck.LoanPathElement.Interior
 import org.rust.lang.core.types.borrowck.LoanPathKind.*
-import org.rust.lang.core.types.borrowck.gatherLoans.AliasableViolationKind.BorrowViolation
 import org.rust.lang.core.types.borrowck.gatherLoans.RestrictionResult.Safe
 import org.rust.lang.core.types.borrowck.gatherLoans.RestrictionResult.SafeIf
 import org.rust.lang.core.types.infer.*

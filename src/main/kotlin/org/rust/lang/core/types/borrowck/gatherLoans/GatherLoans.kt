@@ -45,8 +45,7 @@ class GatherLoanContext(
         if (mode is ConsumeMode.Move) gatherMoveFromExpr(bccx, moveData, moveErrorCollector, element, cmt, mode.reason)
     }
 
-    override fun matchedPat(pat: RsPat, cmt: Cmt, mode: MatchMode) {
-    }
+    override fun matchedPat(pat: RsPat, cmt: Cmt, mode: MatchMode) {}
 
     override fun consumePat(pat: RsPat, cmt: Cmt, mode: ConsumeMode) {
         if (mode is ConsumeMode.Move) gatherMoveFromPat(bccx, moveData, moveErrorCollector, pat, cmt)
