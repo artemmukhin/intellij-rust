@@ -18,7 +18,7 @@ import org.rust.lang.core.types.infer.AliasableReason.AliasableStaticMut
 import org.rust.lang.core.types.infer.BorrowKind
 import org.rust.lang.core.types.infer.BorrowKind.ImmutableBorrow
 import org.rust.lang.core.types.infer.BorrowKind.MutableBorrow
-import org.rust.lang.core.types.infer.Categorization
+import org.rust.lang.core.types.infer.Categorization.Local
 import org.rust.lang.core.types.infer.Cmt
 import org.rust.lang.core.types.infer.MemoryCategorizationContext
 import org.rust.lang.core.types.regions.*
@@ -68,19 +68,15 @@ class GatherLoanContext(
         val loanPath = loanPathIsField(cmt).first
 
         /** Only re-assignments to locals require it to be mutable - this is checked in [checkLoans] */
-        if (cmt.category !is Categorization.Local && !checkMutability(bccx, MutabilityViolation, cmt, MutableBorrow)) {
-            return
-        }
+        if (cmt.category !is Local && !checkMutability(bccx, MutabilityViolation, cmt, MutableBorrow)) return
 
-        if (!checkAliasability(bccx, MutabilityViolation, cmt, MutableBorrow)) {
-            return
-        }
+        if (!checkAliasability(bccx, MutabilityViolation, cmt, MutableBorrow)) return
 
         // `loanPath` may be null with e.g. `*foo() = 5`.
         // In such cases, there is no need to check for conflicts with moves etc, just ignore.
         if (loanPath != null) {
             /** Only re-assignments to locals require it to be mutable - this is checked in [checkLoans] */
-            if (cmt.category !is Categorization.Local) {
+            if (cmt.category !is Local) {
                 markLoanPathAsMutated(loanPath)
             }
             gatherAssignment(bccx, moveData, assignment, loanPath, cmt.element, mode)
@@ -122,7 +118,9 @@ class GatherLoanContext(
         val genScope = computeGenScope(borrowScope, loanScope)
         val killScope = computeKillScope(loanScope, loanPath)
 
-        if (requiredKind == MutableBorrow) markLoanPathAsMutated(loanPath)
+        if (requiredKind == MutableBorrow) {
+            markLoanPathAsMutated(loanPath)
+        }
 
         val loan = Loan(allLoans.size, loanPath, requiredKind, restrictedPaths, genScope, killScope, cause)
         allLoans.add(loan)
