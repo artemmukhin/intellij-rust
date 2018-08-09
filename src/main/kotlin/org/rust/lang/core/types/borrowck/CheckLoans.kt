@@ -10,14 +10,10 @@ import org.rust.lang.core.psi.RsFunction
 import org.rust.lang.core.psi.RsPat
 import org.rust.lang.core.psi.ext.RsElement
 import org.rust.lang.core.psi.ext.descendantsOfType
-import org.rust.lang.core.types.borrowck.LoanPathKind.Downcast
-import org.rust.lang.core.types.borrowck.LoanPathKind.Extend
+import org.rust.lang.core.types.borrowck.LoanPathKind.*
 import org.rust.lang.core.types.borrowck.MovedValueUseKind.MovedInCapture
 import org.rust.lang.core.types.borrowck.MovedValueUseKind.MovedInUse
-import org.rust.lang.core.types.infer.BorrowKind
-import org.rust.lang.core.types.infer.Categorization
-import org.rust.lang.core.types.infer.Cmt
-import org.rust.lang.core.types.infer.InteriorKind
+import org.rust.lang.core.types.infer.*
 import org.rust.lang.core.types.regions.Region
 import org.rust.lang.core.types.regions.Scope
 import org.rust.openapiext.testAssert
@@ -31,6 +27,8 @@ fun checkLoans(
 ) {
     val owner = body.descendantsOfType<RsFunction>().firstOrNull() ?: return
     val clcx = CheckLoanContext(bccx, dfcxLoans, moveData, allLoans)
+    val visitor = ExprUseVisitor(clcx, MemoryCategorizationContext(bccx.regionScopeTree))
+    visitor.consumeBody(body)
 }
 
 sealed class UseError {
@@ -193,6 +191,43 @@ class CheckLoanContext(
                 false // TODO: really? maybe move it to else-branch?
             }
         }
+    }
+
+    private fun eachInScopeLoanAffectingPath(scope: Scope, loanPath: LoanPath, op: (Loan) -> Boolean): Boolean {
+        // First, we check for a loan restricting the path P being used. This accounts for borrows of P
+        // but also borrows of subpaths, like P.a.b. Consider the following example:
+        //     let x = &mut a.b.c; // Restricts a, a.b, and a.b.c
+        //     let y = a;          // Conflicts with restriction
+
+        val cont = eachInScopeLoan(scope) { loan: Loan -> loan.restrictedPaths.all { it != loanPath || op(loan) } }
+
+        if (!cont) return false
+
+        // Next, we must check for *loans* (not restrictions) on the path P or any base path.
+        // This rejects examples like the following:
+        //     let x = &mut a.b;
+        //     let y = a.b.c;
+        //
+        // Limiting this search to loans and not restrictions means that examples like the following continue to work:
+        //     let x = &mut a.b;
+        //     let y = a.c;
+
+        var lp = loanPath
+        while (true) {
+            val kind = lp.kind
+            if (kind is Var || kind is Upvar) break
+
+            if (kind is Downcast) lp = kind.loanPath
+            if (kind is Extend) lp = kind.loanPath
+
+            val cont = eachInScopeLoan(scope) { loan: Loan ->
+                if (loan.loanPath == lp) op(loan) else true
+            }
+
+            if (!cont) return false
+        }
+
+        return true
     }
 
     fun consumeCommon(element: RsElement, cmt: Cmt, mode: ConsumeMode) {
