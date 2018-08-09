@@ -15,6 +15,7 @@ import org.rust.lang.core.types.borrowck.LoanPathKind.Extend
 import org.rust.lang.core.types.borrowck.MovedValueUseKind.MovedInCapture
 import org.rust.lang.core.types.borrowck.MovedValueUseKind.MovedInUse
 import org.rust.lang.core.types.infer.BorrowKind
+import org.rust.lang.core.types.infer.Categorization
 import org.rust.lang.core.types.infer.Cmt
 import org.rust.lang.core.types.infer.InteriorKind
 import org.rust.lang.core.types.regions.Region
@@ -170,7 +171,28 @@ class CheckLoanContext(
     }
 
     private fun checkAssignment(assignmentElement: RsElement, assigneeCmt: Cmt) {
-        TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
+        // Check that we don't invalidate any outstanding loans
+        loanPathIsField(assigneeCmt).first?.let { loanPath ->
+            val scope = Scope.createNode(assignmentElement)
+            eachInScopeLoanAffectingPath(scope, loanPath) { loan ->
+                reportIllegalMutation(loanPath, loan)
+                false
+            }
+        }
+
+        // Check for reassignments to local variables. This needs to be done here because we depend on move data.
+        val cat = assigneeCmt.category
+        if (cat is Categorization.Local) {
+            val loanPath = loanPathIsField(assigneeCmt).first ?: return
+            moveData.eachAssignmentOf(assignmentElement, loanPath) { assign ->
+                if (assigneeCmt.isMutable) {
+                    bccx.usedMutNodes.add(cat.element)
+                } else {
+                    bccx.reportReassignedImmutableVariable(loanPath, assign)
+                }
+                false // TODO: really? maybe move it to else-branch?
+            }
+        }
     }
 
     fun consumeCommon(element: RsElement, cmt: Cmt, mode: ConsumeMode) {
@@ -192,7 +214,7 @@ class CheckLoanContext(
     private fun checkForCopyOrFrozenPath(element: RsElement, copyPath: LoanPath) {
         val error = analyzeRestrictionsOnUse(element, copyPath, BorrowKind.ImmutableBorrow)
         if (error is UseError.WhileBorrowed) {
-
+            // Some error for "cannot use when mutably borrowed"
         }
     }
 
