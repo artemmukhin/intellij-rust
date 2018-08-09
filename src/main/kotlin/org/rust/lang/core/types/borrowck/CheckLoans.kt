@@ -10,10 +10,13 @@ import org.rust.lang.core.psi.RsFunction
 import org.rust.lang.core.psi.RsPat
 import org.rust.lang.core.psi.ext.RsElement
 import org.rust.lang.core.psi.ext.descendantsOfType
+import org.rust.lang.core.types.borrowck.LoanPathKind.Downcast
+import org.rust.lang.core.types.borrowck.LoanPathKind.Extend
 import org.rust.lang.core.types.borrowck.MovedValueUseKind.MovedInCapture
 import org.rust.lang.core.types.borrowck.MovedValueUseKind.MovedInUse
 import org.rust.lang.core.types.infer.BorrowKind
 import org.rust.lang.core.types.infer.Cmt
+import org.rust.lang.core.types.infer.InteriorKind
 import org.rust.lang.core.types.regions.Region
 import org.rust.lang.core.types.regions.Scope
 import org.rust.openapiext.testAssert
@@ -139,6 +142,31 @@ class CheckLoanContext(
             }
         }
         checkAssignment(assignmentElement, assigneeCmt)
+    }
+
+    /**
+     * Reports an error if assigning to [loanPath] will use a moved/uninitialized value.
+     * Mainly this is concerned with detecting derefs of uninitialized pointers.
+     */
+    private fun checkIfAssignedPathIsMoved(element: RsElement, useKind: MovedValueUseKind, loanPath: LoanPath) {
+        val kind = loanPath.kind
+        if (kind is Downcast) {
+            // assigning to `(P->Variant).f` is ok if assigning to `P` is ok
+            checkIfAssignedPathIsMoved(element, useKind, loanPath)
+        } else if (kind is Extend) {
+            val baseLoanPath = kind.loanPath
+            val lpElement = kind.lpElement
+            if (lpElement is LoanPathElement.Interior) {
+                val lpElementKind = lpElement.kind
+                if (lpElementKind is InteriorKind.InteriorField) {
+                    // TODO
+                } else if (lpElementKind is InteriorKind.InteriorElement) {
+                    checkIfPathIsMoved(element, useKind, baseLoanPath)
+                }
+            } else if (lpElement is LoanPathElement.Deref) {
+                checkIfPathIsMoved(element, useKind, baseLoanPath)
+            }
+        }
     }
 
     private fun checkAssignment(assignmentElement: RsElement, assigneeCmt: Cmt) {
