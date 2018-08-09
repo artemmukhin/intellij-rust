@@ -66,6 +66,9 @@ sealed class BorrowKind {
                 Mutability.IMMUTABLE -> ImmutableBorrow
                 Mutability.MUTABLE -> MutableBorrow
             }
+
+        fun isCompatible(firstKind: BorrowKind, secondKind: BorrowKind): Boolean =
+            firstKind == ImmutableBorrow && secondKind == ImmutableBorrow
     }
 }
 

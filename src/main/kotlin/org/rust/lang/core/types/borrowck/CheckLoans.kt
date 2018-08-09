@@ -171,7 +171,7 @@ class CheckLoanContext(
     private fun analyzeRestrictionsOnUse(element: RsElement, usePath: LoanPath, borrowKind: BorrowKind): UseError {
         var result: UseError = UseError.OK
         eachInScopeLoanAffectingPath(Scope.createNode(element), usePath) { loan ->
-            if (!compatibleBorrowKinds(loan.kind, borrowKind)) {
+            if (!BorrowKind.isCompatible(loan.kind, borrowKind)) {
                 result = UseError.WhileBorrowed(loan.loanPath)
                 false
             } else {
