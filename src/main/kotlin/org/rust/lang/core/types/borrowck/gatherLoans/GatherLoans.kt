@@ -28,7 +28,7 @@ import org.rust.lang.core.types.type
 
 fun gatherLoansInFn(bccx: BorrowCheckContext, body: RsBlock): Pair<List<Loan>, MoveData> {
     val glcx = GatherLoanContext(bccx, MoveData(), MoveErrorCollector(), mutableListOf(), Scope.createNode(body))
-    val visitor = ExprUseVisitor(glcx, MemoryCategorizationContext(bccx.regionScopeTree))
+    val visitor = ExprUseWalker(glcx, MemoryCategorizationContext(bccx.regionScopeTree))
     visitor.consumeBody(bccx.body)
     // glcx.reportPotentialErrors()
     return Pair(glcx.allLoans, glcx.moveData)

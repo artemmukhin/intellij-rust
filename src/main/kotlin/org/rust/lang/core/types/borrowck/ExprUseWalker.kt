@@ -107,7 +107,7 @@ enum class MutateMode {
     WriteAndRead    // e.g. `x += y`
 }
 
-class ExprUseVisitor(
+class ExprUseWalker(
     val delegate: Delegate,
     val mc: MemoryCategorizationContext
 ) {

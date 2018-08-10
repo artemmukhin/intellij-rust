@@ -27,7 +27,7 @@ fun checkLoans(
 ) {
     val owner = body.descendantsOfType<RsFunction>().firstOrNull() ?: return
     val clcx = CheckLoanContext(bccx, dfcxLoans, moveData, allLoans)
-    val visitor = ExprUseVisitor(clcx, MemoryCategorizationContext(bccx.regionScopeTree))
+    val visitor = ExprUseWalker(clcx, MemoryCategorizationContext(bccx.regionScopeTree))
     visitor.consumeBody(body)
 }
 
