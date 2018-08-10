@@ -51,28 +51,25 @@ class MoveData(
     /** Assignments to a variable or path, like `x = foo`, but not `x += foo`. */
     val assigneeElements: MutableSet<RsElement> = mutableSetOf()
 ) {
-
     fun isEmpty(): Boolean =
         moves.isEmpty() && pathAssignments.isEmpty() && varAssignments.isEmpty()
 
     fun isVariablePath(pathIndex: MovePathIndex): Boolean =
         paths[pathIndex].parent == null
 
-    fun forEachExtendingPath(index: MovePathIndex, action: (MoveIndex) -> Boolean): Boolean {
+    fun eachExtendingPath(index: MovePathIndex, action: (MoveIndex) -> Boolean): Boolean {
         if (!action(index)) return false
-
         var p = paths[index].firstChild
         while (p != null) {
-            if (!forEachExtendingPath(p, action)) return false
+            if (!eachExtendingPath(p, action)) return false
             p = paths[p].nextSibling
         }
-
         return true
     }
 
-    fun forEachApplicableMove(index: MovePathIndex, action: (MoveIndex) -> Boolean): Boolean {
+    fun eachApplicableMove(index: MovePathIndex, action: (MoveIndex) -> Boolean): Boolean {
         var result = true
-        forEachExtendingPath(index) { moveIndex ->
+        eachExtendingPath(index) { moveIndex ->
             var p: MovePathIndex? = paths[moveIndex].firstMove
             while (p != null) {
                 if (!action(p)) {
@@ -87,12 +84,11 @@ class MoveData(
     }
 
     fun killMoves(pathIndex: MovePathIndex, killElement: RsElement, killKind: KillFrom, dfcxMoves: MoveDataFlow) {
-        val loanPath = paths[pathIndex].loanPath
-        if (loanPath.isPrecise) {
-            forEachApplicableMove(pathIndex) { moveIndex ->
-                dfcxMoves.addKill(killKind, killElement, moveIndex)
-                true
-            }
+        if (!paths[pathIndex].loanPath.isPrecise) return
+
+        eachApplicableMove(pathIndex) { moveIndex ->
+            dfcxMoves.addKill(killKind, killElement, moveIndex)
+            true
         }
     }
 
@@ -139,7 +135,7 @@ class MoveData(
      * Returns the existing move path index for [loanPath], if any, and otherwise adds a new index for [loanPath]
      * and any of its base paths that do not yet have an index.
      */
-    fun movePath(loanPath: LoanPath): MovePathIndex {
+    fun movePathOf(loanPath: LoanPath): MovePathIndex {
         pathMap[loanPath]?.let { return it }
 
         val index = paths.size
@@ -149,7 +145,7 @@ class MoveData(
 
             is Downcast, is Extend -> {
                 val base = (kind as? Downcast)?.loanPath ?: (kind as? Extend)?.loanPath!!
-                val parentIndex = movePath(base)
+                val parentIndex = movePathOf(base)
                 val nextSibling = paths[parentIndex].firstChild
 
                 paths[parentIndex].firstChild = paths.size
@@ -166,15 +162,14 @@ class MoveData(
         val base = lpKind.loanPath
         val baseType = base.ty as? TyAdt ?: return
         val lpElement = lpKind.lpElement as? Interior ?: return
-        val item = baseType.item as? RsStructItem ?: return
-        if (!item.isUnion) return
+        val union = (baseType.item as? RsStructItem)?.takeIf { it.isUnion } ?: return
 
         val interiorKind = lpElement.kind
         val variant = lpElement.element
         val mutCat = lpKind.mutCategory
 
         // Moving/assigning one union field automatically moves/assigns all its fields
-        item.namedFields.forEachIndexed { i, field ->
+        union.namedFields.forEachIndexed { i, field ->
             val fieldInteriorKind = InteriorKind.InteriorField(FieldIndex(i, field.name))
             val fieldType = if (fieldInteriorKind == interiorKind) loanPath.ty else TyUnknown
             if (fieldInteriorKind != interiorKind) {
@@ -188,7 +183,7 @@ class MoveData(
     /** Adds a new move entry for a move of [loanPath] that occurs at location [element] with kind [kind] */
     fun addMove(loanPath: LoanPath, element: RsElement, kind: MoveKind) {
         fun addMoveHelper(loanPath: LoanPath) {
-            val pathIndex = movePath(loanPath)
+            val pathIndex = movePathOf(loanPath)
             val nextMove = paths[pathIndex].firstMove
             paths[pathIndex].firstMove = moves.size
             moves.add(Move(pathIndex, element, kind, nextMove))
@@ -208,7 +203,7 @@ class MoveData(
 
     fun addAssignment(loanPath: LoanPath, assign: RsElement, assignee: RsElement, mode: MutateMode) {
         fun addAssignmentHelper(loanPath: LoanPath) {
-            val pathIndex = movePath(loanPath)
+            val pathIndex = movePathOf(loanPath)
 
             if (mode == MutateMode.Init || mode == MutateMode.JustWrite) {
                 assigneeElements.add(assignee)
@@ -292,7 +287,7 @@ class FlowedMoveData(moveData: MoveData, bccx: BorrowCheckContext, cfg: ControlF
         this.dfcxAssign = dfcxAssign
     }
 
-    fun kindOfMoveOfPath(element: RsElement, loanPath: LoanPath): MoveKind? {
+    fun moveKindOfPath(element: RsElement, loanPath: LoanPath): MoveKind? {
         val loanPathIndex = moveData.pathMap[loanPath] ?: return null
 
         var result: MoveKind? = null
@@ -317,8 +312,7 @@ class FlowedMoveData(moveData: MoveData, bccx: BorrowCheckContext, cfg: ControlF
         // OK scenario:
         // 4. move of `a.b.c`, use of `a.b.d`
 
-        val baseNodes: List<MovePathIndex> = moveData.existingBasePaths(loanPath)
-        if (baseNodes.isEmpty()) return true
+        val baseNodes = moveData.existingBasePaths(loanPath).takeIf { it.isNotEmpty() } ?: return true
 
         val loanPathIndex = moveData.pathMap[loanPath]
 

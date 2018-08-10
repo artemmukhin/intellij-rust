@@ -236,7 +236,7 @@ class CheckLoanContext(
                 MovedInUse
             }
             is ConsumeMode.Move -> {
-                val moveKind = moveData.kindOfMoveOfPath(element, loanPath)
+                val moveKind = moveData.moveKindOfPath(element, loanPath)
                 if (moveKind == null) {
                     // sometimes moves don't have a move kind; this either means that the original move was from
                     // something illegal to move, or was moved from referent of an unsafe pointer
