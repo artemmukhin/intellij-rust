@@ -65,8 +65,6 @@ class GatherLoanContext(
 
     /** Guarantees that [cmt] is assignable, or reports an error. */
     fun guaranteeAssignmentValid(assignment: RsElement, cmt: Cmt, mode: MutateMode) {
-        val loanPath = LoanPath.computeFor(cmt)
-
         /** Only re-assignments to locals require it to be mutable - this is checked in [checkLoans] */
         if (cmt.category !is Local && !checkMutability(bccx, MutabilityViolation, cmt, MutableBorrow)) return
 
@@ -74,20 +72,15 @@ class GatherLoanContext(
 
         // `loanPath` may be null with e.g. `*foo() = 5`.
         // In such cases, there is no need to check for conflicts with moves etc, just ignore.
-        if (loanPath != null) {
-            /** Only re-assignments to locals require it to be mutable - this is checked in [checkLoans] */
-            if (cmt.category !is Local) {
-                markLoanPathAsMutated(loanPath)
-            }
-            gatherAssignment(bccx, moveData, assignment, loanPath, cmt.element, mode)
+        val loanPath = LoanPath.computeFor(cmt) ?: return
+        if (cmt.category !is Local) {
+            markLoanPathAsMutated(loanPath)
         }
+        gatherAssignment(bccx, moveData, assignment, loanPath, cmt.element, mode)
     }
 
-    /**
-     * Guarantees that Address([cmt]) will be valid for the duration of `static_scope_r`, or reports an error.
-     * This may entail taking out loans, which will be added to the [req_loan_map]
-     */
-    fun guaranteeValid(element: RsElement, cmt: Cmt, requiredKind: BorrowKind, loanRegion: Region, cause: LoanCause) {
+    /** Guarantees that Address([cmt]) will be valid for the duration of static scope, or reports an error. */
+    private fun guaranteeValid(element: RsElement, cmt: Cmt, requiredKind: BorrowKind, loanRegion: Region, cause: LoanCause) {
         // A loan for the empty region can never be dereferenced, so it is always safe
         if (loanRegion is ReEmpty) return
 
@@ -126,11 +119,8 @@ class GatherLoanContext(
         allLoans.add(loan)
     }
 
-    /**
-     * For mutable loans of content whose mutability derives
-     * from a local variable, mark the mutability decl as necessary.
-     */
-    fun markLoanPathAsMutated(loanPath: LoanPath) {
+    // TODO: refactor
+    private fun markLoanPathAsMutated(loanPath: LoanPath) {
         var wrappedPath: LoanPath? = loanPath
         var throughBorrow = false
 
@@ -197,7 +187,12 @@ class GatherLoanContext(
     }
 }
 
-fun checkAliasability(bccx: BorrowCheckContext, cause: AliasableViolationKind, cmt: Cmt, requiredKind: BorrowKind): Boolean {
+fun checkAliasability(
+    bccx: BorrowCheckContext,
+    cause: AliasableViolationKind,
+    cmt: Cmt,
+    requiredKind: BorrowKind
+): Boolean {
     val aliasability = cmt.aliasability
 
     // Uniquely accessible path -- OK for `&` and `&mut`
