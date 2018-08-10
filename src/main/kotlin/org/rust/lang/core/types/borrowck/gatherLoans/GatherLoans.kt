@@ -65,7 +65,7 @@ class GatherLoanContext(
 
     /** Guarantees that [cmt] is assignable, or reports an error. */
     fun guaranteeAssignmentValid(assignment: RsElement, cmt: Cmt, mode: MutateMode) {
-        val loanPath = loanPathIsField(cmt).first
+        val loanPath = LoanPath.computeFor(cmt)
 
         /** Only re-assignments to locals require it to be mutable - this is checked in [checkLoans] */
         if (cmt.category !is Local && !checkMutability(bccx, MutabilityViolation, cmt, MutableBorrow)) return

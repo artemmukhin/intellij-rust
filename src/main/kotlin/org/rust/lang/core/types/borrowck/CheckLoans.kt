@@ -55,7 +55,7 @@ class CheckLoanContext(
     }
 
     override fun borrow(element: RsElement, cmt: Cmt, loanRegion: Region, kind: BorrowKind, cause: LoanCause) {
-        val loanPath = loanPathIsField(cmt).first
+        val loanPath = LoanPath.computeFor(cmt)
         if (loanPath != null) {
             val movedValueUseKind = if (cause == LoanCause.ClosureCapture) MovedInCapture else MovedInUse
             checkIfPathIsMoved(element, movedValueUseKind, loanPath)
@@ -124,7 +124,7 @@ class CheckLoanContext(
     override fun declarationWithoutInit(element: RsElement) {}
 
     override fun mutate(assignmentElement: RsElement, assigneeCmt: Cmt, mode: MutateMode) {
-        val loanPath = loanPathIsField(assigneeCmt).first
+        val loanPath = LoanPath.computeFor(assigneeCmt)
         if (loanPath != null) {
             when (mode) {
                 MutateMode.Init, MutateMode.JustWrite -> {
@@ -168,7 +168,7 @@ class CheckLoanContext(
 
     private fun checkAssignment(assignmentElement: RsElement, assigneeCmt: Cmt) {
         // Check that we don't invalidate any outstanding loans
-        loanPathIsField(assigneeCmt).first?.let { loanPath ->
+        LoanPath.computeFor(assigneeCmt)?.let { loanPath ->
             val scope = Scope.createNode(assignmentElement)
             eachInScopeLoanAffectingPath(scope, loanPath) { loan ->
                 reportIllegalMutation(loanPath, loan)
@@ -179,7 +179,7 @@ class CheckLoanContext(
         // Check for reassignments to local variables. This needs to be done here because we depend on move data.
         val cat = assigneeCmt.category
         if (cat is Categorization.Local) {
-            val loanPath = loanPathIsField(assigneeCmt).first ?: return
+            val loanPath = LoanPath.computeFor(assigneeCmt) ?: return
             moveData.eachAssignmentOf(assignmentElement, loanPath) { assign ->
                 if (assigneeCmt.isMutable) {
                     bccx.usedMutNodes.add(cat.element)
@@ -229,7 +229,7 @@ class CheckLoanContext(
     }
 
     fun consumeCommon(element: RsElement, cmt: Cmt, mode: ConsumeMode) {
-        val loanPath = loanPathIsField(cmt).first ?: return
+        val loanPath = LoanPath.computeFor(cmt) ?: return
         val movedValueUseKind = when (mode) {
             is ConsumeMode.Copy -> {
                 checkForCopyOrFrozenPath(element, loanPath)

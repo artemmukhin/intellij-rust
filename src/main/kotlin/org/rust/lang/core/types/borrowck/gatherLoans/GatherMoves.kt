@@ -91,7 +91,7 @@ fun gatherMove(
         val error = MoveError(move, moveInfo.movePlace)
         moveErrorCollector.addError(error)
     } else {
-        loanPathIsField(moveInfo.cmt).first?.let { moveData.addMove(it, moveInfo.element, moveInfo.kind) }
+        LoanPath.computeFor(moveInfo.cmt)?.let { moveData.addMove(it, moveInfo.element, moveInfo.kind) }
     }
 }
 

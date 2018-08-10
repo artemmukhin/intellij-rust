@@ -74,6 +74,56 @@ data class LoanPath(val kind: LoanPathKind, val ty: Ty) {
             else -> false
         }
     }
+
+    companion object {
+        fun computeFor(cmt: Cmt): LoanPath? =
+            loanPathIsField(cmt).first
+
+        // TODO: refactor
+        fun loanPathIsField(cmt: Cmt): Pair<LoanPath?, Boolean> {
+            fun loanPath(kind: LoanPathKind): LoanPath = LoanPath(kind, cmt.ty)
+
+            val category = cmt.category
+            return when (category) {
+                is Categorization.Rvalue, Categorization.StaticItem -> Pair(null, false)
+
+                is Categorization.Upvar -> Pair(loanPath(Upvar()), false)
+
+                is Categorization.Local -> Pair(loanPath(Var(cmt.element)), false)
+
+                is Categorization.Deref -> {
+                    val (baseLp, baseIsField) = loanPathIsField(category.cmt)
+                    if (baseLp != null) {
+                        val kind = Extend(baseLp, cmt.mutabilityCategory, Deref(category.pointerKind))
+                        Pair(loanPath(kind), baseIsField)
+                    } else {
+                        Pair(null, baseIsField)
+                    }
+                }
+
+                is Categorization.Interior -> {
+                    val baseCmt = category.cmt
+                    val baseLp = computeFor(baseCmt) ?: return Pair(null, true)
+                    val optVariantId = if (baseCmt.category is Categorization.Downcast) baseCmt.element else null
+                    val kind = Extend(baseLp, cmt.mutabilityCategory, Interior(optVariantId, category.interiorKind))
+                    Pair(loanPath(kind), true)
+                }
+
+                is Categorization.Downcast -> {
+                    val baseCmt = category.cmt
+                    val (baseLp, baseIsField) = loanPathIsField(baseCmt)
+                    if (baseLp != null) {
+                        val kind = Downcast(baseLp, category.element)
+                        Pair(loanPath(kind), baseIsField)
+                    } else {
+                        Pair(null, baseIsField)
+                    }
+                }
+
+                null -> Pair(null, false)
+            }
+        }
+    }
 }
 
 sealed class LoanPathKind {
@@ -152,50 +202,6 @@ fun buildBorrowckDataflowData(bccx: BorrowCheckContext, forceAnalysis: Boolean, 
 
     val flowedMoves = FlowedMoveData(moveData, bccx, cfg, body)
     return AnalysisData(allLoans, loanDfcx, flowedMoves)
-}
-
-fun loanPathIsField(cmt: Cmt): Pair<LoanPath?, Boolean> {
-    fun loanPath(kind: LoanPathKind): LoanPath = LoanPath(kind, cmt.ty)
-
-    val category = cmt.category
-    return when (category) {
-        is Categorization.Rvalue, Categorization.StaticItem -> Pair(null, false)
-
-        is Categorization.Upvar -> Pair(loanPath(Upvar()), false)
-
-        is Categorization.Local -> Pair(loanPath(Var(cmt.element)), false)
-
-        is Categorization.Deref -> {
-            val (baseLp, baseIsField) = loanPathIsField(category.cmt)
-            if (baseLp != null) {
-                val kind = Extend(baseLp, cmt.mutabilityCategory, Deref(category.pointerKind))
-                Pair(loanPath(kind), baseIsField)
-            } else {
-                Pair(null, baseIsField)
-            }
-        }
-
-        is Categorization.Interior -> {
-            val baseCmt = category.cmt
-            val baseLp = loanPathIsField(baseCmt).first ?: return Pair(null, true)
-            val optVariantId = if (baseCmt.category is Categorization.Downcast) baseCmt.element else null
-            val kind = Extend(baseLp, cmt.mutabilityCategory, Interior(optVariantId, category.interiorKind))
-            Pair(loanPath(kind), true)
-        }
-
-        is Categorization.Downcast -> {
-            val baseCmt = category.cmt
-            val (baseLp, baseIsField) = loanPathIsField(baseCmt)
-            if (baseLp != null) {
-                val kind = Downcast(baseLp, category.element)
-                Pair(loanPath(kind), baseIsField)
-            } else {
-                Pair(null, baseIsField)
-            }
-        }
-
-        null -> Pair(null, false)
-    }
 }
 
 sealed class AliasableViolationKind {
