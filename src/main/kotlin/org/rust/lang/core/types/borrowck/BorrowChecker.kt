@@ -112,6 +112,14 @@ class BorrowCheckContext(
     fun reportAliasabilityViolation(cause: AliasableViolationKind, reason: AliasableReason, cmt: Cmt) {
         // TODO
     }
+
+    fun reportUseOfMovedValue(useKind: MovedValueUseKind, loanPath: LoanPath, move: Move, movedLp: LoanPath) {
+        // TODO
+    }
+
+    fun reportReassignedImmutableVariable(loanPath: LoanPath, assignment: Assignment) {
+        // TODO
+    }
 }
 
 fun borrowck(owner: RsElement): BorrowCheckResult? {

@@ -64,6 +64,11 @@ class CheckLoanContext(
         // checkForLoansAcrossYields(cmt, loanRegion)
     }
 
+    /**
+     * Checks to see whether any of the loans that are issued on entrance to [element] conflict with loans
+     * that have already been issued when we enter [element].
+     * For example, we don't permit two `&mut` borrows of the same variable.
+     */
     private fun checkForConflictingLoans(element: RsElement) {
         val newLoanIndices = loansGeneratedBy(element)
 
@@ -84,30 +89,23 @@ class CheckLoanContext(
 
     }
 
-    /** Checks whether [oldLoan] and [newLoan] can safely be issued simultaneously. */
-    private fun reportErrorIfLoansConflict(oldLoan: Loan, newLoan: Loan): Boolean {
-        // Should only be called for loans that are in scope at the same time.
-        testAssert { bccx.regionScopeTree.areScopesIntersect(oldLoan.killScope, newLoan.killScope) }
-
-        val errorOldNew = reportErrorIfLoanConflictsWithRestriction(oldLoan, newLoan, oldLoan, newLoan)
-        val errorNewOld = reportErrorIfLoanConflictsWithRestriction(newLoan, oldLoan, oldLoan, newLoan)
-
-        if (errorOldNew != null && errorNewOld != null) {
-            errorOldNew.error.emit()
-            errorNewOld.error.cancel()
-        } else if (errorOldNew != null) {
-            errorOldNew.error.emit()
-        } else if (errorNewOld != null) {
-            errorNewOld.error.emit()
-        } else {
-            return true
-        }
-
-        return false
-    }
-
-    private fun eachIssuedLoan(element: RsElement, op: (Loan) -> Boolean): Boolean =
+    /**
+     * Iterates over each loan that has been issued on entrance to [element], regardless of whether it is
+     * actually in scope at that point.  Sometimes loans are issued for future scopes and thus they may have been
+     * issued but not yet be in effect.
+     */
+    fun eachIssuedLoan(element: RsElement, op: (Loan) -> Boolean): Boolean =
         dfcxLoans.eachBitOnEntry(element) { op(allLoans[it]) }
+
+    /** Like [eachIssuedLoan], but only considers loans that are currently in scope. */
+    fun eachInScopeLoan(scope: Scope, op: (Loan) -> Boolean): Boolean =
+        eachIssuedLoan(scope.element) { loan ->
+            if (bccx.regionScopeTree.isSubScopeOf(scope, loan.killScope)) {
+                op(loan)
+            } else {
+                true
+            }
+        }
 
     private fun loansGeneratedBy(element: RsElement): List<Int> {
         val result = mutableListOf<Int>()
@@ -238,12 +236,25 @@ class CheckLoanContext(
                 MovedInUse
             }
             is ConsumeMode.Move -> {
-                val moveKind = moveData.kindOfMoveOfPath(element, loanPath) ?: MovedInUse
-                checkForMoveOfBorrowedPath(element, loanPath, moveKind)
-                if (moveKind == MoveKind.Captured) MovedInCapture else MovedInUse
+                val moveKind = moveData.kindOfMoveOfPath(element, loanPath)
+                if (moveKind == null) {
+                    // sometimes moves don't have a move kind; this either means that the original move was from
+                    // something illegal to move, or was moved from referent of an unsafe pointer
+                    MovedInUse
+                } else {
+                    checkForMoveOfBorrowedPath(element, loanPath, moveKind)
+                    if (moveKind == MoveKind.Captured) MovedInCapture else MovedInUse
+                }
             }
         }
         checkIfPathIsMoved(element, movedValueUseKind, loanPath)
+    }
+
+    private fun checkForMoveOfBorrowedPath(element: RsElement, movePath: LoanPath, moveKind: MoveKind) {
+        val error = analyzeRestrictionsOnUse(element, movePath, BorrowKind.MutableBorrow)
+        if (error is UseError.WhileBorrowed) {
+            // Some error for "cannot move when borrowed"
+        }
     }
 
     private fun checkForCopyOrFrozenPath(element: RsElement, copyPath: LoanPath) {
@@ -265,5 +276,38 @@ class CheckLoanContext(
         }
 
         return result
+    }
+
+    /** Checks whether [oldLoan] and [newLoan] can safely be issued simultaneously. */
+    private fun reportErrorIfLoansConflict(oldLoan: Loan, newLoan: Loan): Boolean {
+        // Should only be called for loans that are in scope at the same time.
+        testAssert { bccx.regionScopeTree.areScopesIntersect(oldLoan.killScope, newLoan.killScope) }
+
+        val errorOldNew = reportErrorIfLoanConflictsWithRestriction(oldLoan, newLoan, oldLoan, newLoan)
+        val errorNewOld = reportErrorIfLoanConflictsWithRestriction(newLoan, oldLoan, oldLoan, newLoan)
+
+        // TODO
+        if (errorOldNew != null && errorNewOld != null) {
+            // errorOldNew.error.emit()
+            // errorNewOld.error.cancel()
+        } else if (errorOldNew != null) {
+            // errorOldNew.error.emit()
+        } else if (errorNewOld != null) {
+            // errorNewOld.error.emit()
+        } else {
+            return true
+        }
+
+        return false
+    }
+
+    /** Checks whether the restrictions introduced by `loan1` would prohibit `loan2` */
+    private fun reportErrorIfLoanConflictsWithRestriction(loan1: Loan, loan2: Loan, oldLoan: Loan, newLoan: Loan): Any? {
+        // TODO
+        return null
+    }
+
+    private fun reportIllegalMutation(loanPath: LoanPath, loan: Loan) {
+        // TODO
     }
 }

@@ -341,6 +341,16 @@ class FlowedMoveData(moveData: MoveData, bccx: BorrowCheckContext, cfg: ControlF
             result
         }
     }
+
+    /** Iterates through every assignment to [loanPath] that may have occurred on entry to [element]. */
+    fun eachAssignmentOf(element: RsElement, loanPath: LoanPath, f: (Assignment) -> Boolean): Boolean {
+        val loanPathIndex = moveData.pathMap[loanPath] ?: return true
+
+        return dfcxAssign.eachBitOnEntry(element) { index ->
+            val assignment = moveData.varAssignments[index]
+            assignment.path != loanPathIndex || f(assignment)
+        }
+    }
 }
 
 class Move(
