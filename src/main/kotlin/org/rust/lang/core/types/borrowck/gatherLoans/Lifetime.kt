@@ -40,21 +40,26 @@ class GuaranteeLifetimeContext(
 ) {
     fun check(cmt: Cmt, disriminantScope: RsElement?): Boolean =
         when (cmt.category) {
-            is Rvalue, is Local, is Upvar, is Deref -> checkScope(scope(cmt))
+            is Rvalue, is Local, is Upvar, is Deref -> checkScope(maximalScope(cmt))
             is StaticItem -> true
             is Interior -> check(cmt.category.cmt, disriminantScope)
             is Downcast -> check(cmt.category.cmt, disriminantScope)
             null -> true
         }
 
-    fun checkScope(maxScope: Region): Boolean =
-        !bccx.isSubregionOf(loanRegion, maxScope)
+    private fun checkScope(maxScope: Region): Boolean {
+        if (!bccx.isSubregionOf(loanRegion, maxScope)) {
+            reportError(BorrowCheckErrorCode.OutOfScope(maxScope, loanRegion, cause))
+            return false
+        }
+        return true
+    }
 
     /**
      * Returns the maximal region scope for the which the place [cmt] is guaranteed
      * to be valid without any rooting etc, and presuming [cmt] is not mutated.
      */
-    fun scope(cmt: Cmt): Region {
+    private fun maximalScope(cmt: Cmt): Region {
         val category = cmt.category
         return when (category) {
             is Rvalue -> category.region
@@ -68,13 +73,13 @@ class GuaranteeLifetimeContext(
                     is BorrowedPointer -> pointerKind.region
                 }
             }
-            is Interior -> scope(category.cmt)
-            is Downcast -> scope(category.cmt)
+            is Interior -> maximalScope(category.cmt)
+            is Downcast -> maximalScope(category.cmt)
             null -> ReStatic
         }
     }
 
-    fun reportError(code: BorrowCheckErrorCode) {
+    private fun reportError(code: BorrowCheckErrorCode) {
         bccx.report(BorrowCheckError(BorrowViolation(cause), cmt, code))
     }
 }
