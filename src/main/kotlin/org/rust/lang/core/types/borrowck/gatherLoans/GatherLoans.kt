@@ -241,6 +241,11 @@ fun checkMutability(
         false
     }
 
+fun guaranteeLifetime(bccx: BorrowCheckContext, scope: Scope, cause: LoanCause, cmt: Cmt, loanRegion: Region): Boolean =
+    GuaranteeLifetimeContext(bccx, scope, cause, cmt, loanRegion).check(cmt, null)
+
+fun computeRestrictions(bccx: BorrowCheckContext, cause: LoanCause, cmt: Cmt, loanRegion: Region): RestrictionResult =
+    RestrictionContext(bccx, loanRegion, cause).restrict(cmt)
 
 val RsElement.type: Ty
     get() = when (this) {

@@ -20,17 +20,6 @@ import org.rust.lang.core.types.regions.ReStatic
 import org.rust.lang.core.types.regions.Region
 import org.rust.lang.core.types.regions.Scope
 
-fun guaranteeLifetime(
-    bccx: BorrowCheckContext,
-    itemScope: Scope,
-    cause: LoanCause,
-    cmt: Cmt,
-    loanRegion: Region
-): Boolean {
-    val context = GuaranteeLifetimeContext(bccx, itemScope, cause, cmt, loanRegion)
-    return context.check(cmt, null)
-}
-
 class GuaranteeLifetimeContext(
     val bccx: BorrowCheckContext,
     val itemScope: Scope,

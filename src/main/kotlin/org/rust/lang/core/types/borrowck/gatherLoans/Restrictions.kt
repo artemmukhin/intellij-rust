@@ -25,12 +25,8 @@ sealed class RestrictionResult {
     class SafeIf(val loanPath: LoanPath, val loanPaths: MutableList<LoanPath>) : RestrictionResult()
 }
 
-fun computeRestrictions(bccx: BorrowCheckContext, cause: LoanCause, cmt: Cmt, loanRegion: Region): RestrictionResult {
-    val context = RestrictionContext(bccx, loanRegion, cause)
-    return context.restrict(cmt)
-}
-
 class RestrictionContext(val bccx: BorrowCheckContext, val loanRegion: Region, val cause: LoanCause) {
+    // TODO: refactor
     fun restrict(cmt: Cmt): RestrictionResult {
         fun loanPath(kind: LoanPathKind): LoanPath = LoanPath(kind, cmt.ty)
 
