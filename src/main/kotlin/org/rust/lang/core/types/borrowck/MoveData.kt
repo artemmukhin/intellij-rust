@@ -28,23 +28,21 @@ import org.rust.openapiext.testAssert
 class MoveData(
     val paths: MutableList<MovePath> = mutableListOf(),
 
-    /** Cache of loan path to move path index, for easy lookup. */
-    val pathMap: MutableMap<LoanPath, MovePathIndex> = mutableMapOf(),
+    /** Cache of loan path to move path, for easy lookup. */
+    val pathMap: MutableMap<LoanPath, MovePath> = mutableMapOf(),
 
     /** Each move or uninitialized variable gets an entry here. */
     val moves: MutableList<Move> = mutableListOf(),
 
     /**
-     * Assignments to a variable, like `x = foo`. These are assigned
-     * bits for dataflow, since we must track them to ensure that
-     * immutable variables are assigned at most once along each path.
+     * Assignments to a variable, like `x = foo`. These are assigned bits for dataflow since we must track them
+     * to ensure that immutable variables are assigned at most once along each path.
      */
     val varAssignments: MutableList<Assignment> = mutableListOf(),
 
     /**
-     * Assignments to a path, like `x.f = foo`. These are not
-     * assigned dataflow bits, but we track them because they still
-     * kill move bits.
+     * Assignments to a path, like `x.f = foo`. These are not assigned dataflow bits,
+     * but we track them because they still kill move bits.
      */
     val pathAssignments: MutableList<Assignment> = mutableListOf(),
 
@@ -54,40 +52,40 @@ class MoveData(
     fun isEmpty(): Boolean =
         moves.isEmpty() && pathAssignments.isEmpty() && varAssignments.isEmpty()
 
-    fun isVariablePath(pathIndex: MovePathIndex): Boolean =
-        paths[pathIndex].parent == null
+    fun isVariablePath(path: MovePath): Boolean =
+        path.parent == null
 
-    fun eachExtendingPath(index: MovePathIndex, action: (MoveIndex) -> Boolean): Boolean {
-        if (!action(index)) return false
-        var p = paths[index].firstChild
-        while (p != null) {
-            if (!eachExtendingPath(p, action)) return false
-            p = paths[p].nextSibling
+    fun eachExtendingPath(movePath: MovePath, action: (MovePath) -> Boolean): Boolean {
+        if (!action(movePath)) return false
+        var path = movePath.firstChild
+        while (path != null) {
+            if (!eachExtendingPath(path, action)) return false
+            path = path.nextSibling
         }
         return true
     }
 
-    fun eachApplicableMove(index: MovePathIndex, action: (MoveIndex) -> Boolean): Boolean {
+    fun eachApplicableMove(movePath: MovePath, action: (Move) -> Boolean): Boolean {
         var result = true
-        eachExtendingPath(index) { moveIndex ->
-            var p: MovePathIndex? = paths[moveIndex].firstMove
-            while (p != null) {
-                if (!action(p)) {
+        eachExtendingPath(movePath) { path ->
+            var move: Move? = path.firstMove
+            while (move != null) {
+                if (!action(move)) {
                     result = false
                     break
                 }
-                p = moves[p].nextMove
+                move = move.nextMove
             }
             result
         }
         return result
     }
 
-    fun killMoves(pathIndex: MovePathIndex, killElement: RsElement, killKind: KillFrom, dfcxMoves: MoveDataFlow) {
-        if (!paths[pathIndex].loanPath.isPrecise) return
+    fun killMoves(path: MovePath, killElement: RsElement, killKind: KillFrom, dfcxMoves: MoveDataFlow) {
+        if (!path.loanPath.isPrecise) return
 
-        eachApplicableMove(pathIndex) { moveIndex ->
-            dfcxMoves.addKill(killKind, killElement, moveIndex)
+        eachApplicableMove(path) { move ->
+            dfcxMoves.addKill(killKind, killElement, move.index)
             true
         }
     }
@@ -116,14 +114,14 @@ class MoveData(
             val kind = path.loanPath.kind
             if (kind is Var || kind is Upvar || kind is Downcast) {
                 val killScope = path.loanPath.killScope(bccx)
-                val pathIndex = pathMap[path.loanPath] ?: return
-                killMoves(pathIndex, killScope.element, ScopeEnd, dfcxMoves)
+                val movePath = pathMap[path.loanPath] ?: return
+                killMoves(movePath, killScope.element, ScopeEnd, dfcxMoves)
             }
         }
 
         // Kill all assignments when the variable goes out of scope
         varAssignments.forEachIndexed { i, assignment ->
-            val lp = paths[assignment.path].loanPath
+            val lp = assignment.path.loanPath
             if (lp.kind is Var || lp.kind is Upvar || lp.kind is Downcast) {
                 val killScope = lp.killScope(bccx)
                 dfcxAssign.addKill(ScopeEnd, killScope.element, i)
@@ -132,30 +130,30 @@ class MoveData(
     }
 
     /**
-     * Returns the existing move path index for [loanPath], if any, and otherwise adds a new index for [loanPath]
+     * Returns the existing move path for [loanPath], if any, and otherwise adds a new move path for [loanPath]
      * and any of its base paths that do not yet have an index.
      */
-    fun movePathOf(loanPath: LoanPath): MovePathIndex {
+    fun movePathOf(loanPath: LoanPath): MovePath {
         pathMap[loanPath]?.let { return it }
 
-        val index = paths.size
+        val oldSize = paths.size
         val kind = loanPath.kind
         when (kind) {
             is Var, is Upvar -> paths.add(MovePath(loanPath))
 
             is Downcast, is Extend -> {
                 val base = (kind as? Downcast)?.loanPath ?: (kind as? Extend)?.loanPath!!
-                val parentIndex = movePathOf(base)
-                val nextSibling = paths[parentIndex].firstChild
+                val parentPath = movePathOf(base)
 
-                paths[parentIndex].firstChild = paths.size
-                paths.add(MovePath(loanPath, parentIndex, null, null, nextSibling))
+                val newMovePath = MovePath(loanPath, parentPath, null, null, parentPath.firstChild)
+                parentPath.firstChild = newMovePath
+                paths.add(newMovePath)
             }
         }
 
-        testAssert { index == paths.size - 1 }
-        pathMap[loanPath] = index
-        return index
+        testAssert { oldSize == paths.size - 1 }
+        pathMap[loanPath] = paths.last()
+        return paths.last()
     }
 
     private fun processUnionFields(loanPath: LoanPath, lpKind: LoanPathKind.Extend, action: (LoanPath) -> Unit) {
@@ -183,10 +181,11 @@ class MoveData(
     /** Adds a new move entry for a move of [loanPath] that occurs at location [element] with kind [kind] */
     fun addMove(loanPath: LoanPath, element: RsElement, kind: MoveKind) {
         fun addMoveHelper(loanPath: LoanPath) {
-            val pathIndex = movePathOf(loanPath)
-            val nextMove = paths[pathIndex].firstMove
-            paths[pathIndex].firstMove = moves.size
-            moves.add(Move(pathIndex, element, kind, nextMove))
+            val path = movePathOf(loanPath)
+            val nextMove = path.firstMove
+            val newMove = Move(path, element, kind, moves.size, nextMove)
+            path.firstMove = newMove
+            moves.add(newMove)
         }
 
         var lp = loanPath
@@ -203,15 +202,15 @@ class MoveData(
 
     fun addAssignment(loanPath: LoanPath, assign: RsElement, assignee: RsElement, mode: MutateMode) {
         fun addAssignmentHelper(loanPath: LoanPath) {
-            val pathIndex = movePathOf(loanPath)
+            val movePath = movePathOf(loanPath)
 
             if (mode == MutateMode.Init || mode == MutateMode.JustWrite) {
                 assigneeElements.add(assignee)
             }
 
-            val assignment = Assignment(pathIndex, assign, assignee)
+            val assignment = Assignment(movePath, assign, assignee)
 
-            if (isVariablePath(pathIndex)) {
+            if (isVariablePath(movePath)) {
                 varAssignments.add(assignment)
             } else {
                 pathAssignments.add(assignment)
@@ -226,18 +225,18 @@ class MoveData(
         }
     }
 
-    fun existingBasePaths(loanPath: LoanPath): List<MovePathIndex> {
-        val result = mutableListOf<MovePathIndex>()
+    fun existingBasePaths(loanPath: LoanPath): List<MovePath> {
+        val result = mutableListOf<MovePath>()
         addExistingBasePaths(loanPath, result)
         return result
     }
 
     /// Adds any existing move path indices for `loanPath` and any base paths of `loanPath` to `result`,
     /// but doesn't add new move paths
-    fun addExistingBasePaths(loanPath: LoanPath, result: MutableList<MovePathIndex>) {
-        val index = pathMap[loanPath]
-        if (index != null) {
-            eachBasePath(index) { result.add(it) }
+    fun addExistingBasePaths(loanPath: LoanPath, result: MutableList<MovePath>) {
+        val movePath = pathMap[loanPath]
+        if (movePath != null) {
+            eachBasePath(movePath) { result.add(it) }
         } else {
             val kind = loanPath.kind
             when (kind) {
@@ -247,11 +246,11 @@ class MoveData(
         }
     }
 
-    fun eachBasePath(index: MovePathIndex, f: (MovePathIndex) -> Boolean): Boolean {
-        var p = index
+    fun eachBasePath(movePath: MovePath, f: (MovePath) -> Boolean): Boolean {
+        var path = movePath
         while (true) {
-            if (!f(p)) return false
-            p = paths[p].parent ?: return true
+            if (!f(path)) return false
+            path = path.parent ?: return true
         }
     }
 }
@@ -288,12 +287,12 @@ class FlowedMoveData(moveData: MoveData, bccx: BorrowCheckContext, cfg: ControlF
     }
 
     fun moveKindOfPath(element: RsElement, loanPath: LoanPath): MoveKind? {
-        val loanPathIndex = moveData.pathMap[loanPath] ?: return null
+        val movePath = moveData.pathMap[loanPath] ?: return null
 
         var result: MoveKind? = null
         dfcxMoves.eachGenBit(element) { moveIndex ->
             val move = moveData.moves[moveIndex]
-            if (move.path == loanPathIndex) {
+            if (move.path == movePath) {
                 result = move.kind
                 false
             } else {
@@ -314,7 +313,7 @@ class FlowedMoveData(moveData: MoveData, bccx: BorrowCheckContext, cfg: ControlF
 
         val baseNodes = moveData.existingBasePaths(loanPath).takeIf { it.isNotEmpty() } ?: return true
 
-        val loanPathIndex = moveData.pathMap[loanPath]
+        val movePath = moveData.pathMap[loanPath]
 
         var result = true
         return dfcxMoves.eachBitOnEntry(element) { index ->
@@ -322,13 +321,13 @@ class FlowedMoveData(moveData: MoveData, bccx: BorrowCheckContext, cfg: ControlF
             val movedPath = move.path
             if (baseNodes.any { it == movedPath }) {
                 // Scenario 1 or 2: `loanPath` or some base path of `loanPath` was moved.
-                if (!f(move, moveData.paths[movedPath].loanPath)) {
+                if (!f(move, movedPath.loanPath)) {
                     result = false
                 }
-            } else if (loanPathIndex != null) {
+            } else if (movePath != null) {
                 val cont = moveData.eachBasePath(movedPath) {
                     // Scenario 3: some extension of `loanPath` was moved
-                    if (it == loanPathIndex) f(move, moveData.paths[movedPath].loanPath) else true
+                    if (it == movePath) f(move, movedPath.loanPath) else true
                 }
                 if (!cont) result = false
             }
@@ -338,33 +337,31 @@ class FlowedMoveData(moveData: MoveData, bccx: BorrowCheckContext, cfg: ControlF
 
     /** Iterates through every assignment to [loanPath] that may have occurred on entry to [element]. */
     fun eachAssignmentOf(element: RsElement, loanPath: LoanPath, f: (Assignment) -> Boolean): Boolean {
-        val loanPathIndex = moveData.pathMap[loanPath] ?: return true
+        val movePath = moveData.pathMap[loanPath] ?: return true
 
         return dfcxAssign.eachBitOnEntry(element) { index ->
             val assignment = moveData.varAssignments[index]
-            assignment.path != loanPathIndex || f(assignment)
+            assignment.path != movePath || f(assignment)
         }
     }
 }
 
 class Move(
-    val path: MovePathIndex,
+    val path: MovePath,
     val element: RsElement,
     val kind: MoveKind,
+    val index: Int,
     /** Next node in linked list of moves from `path` */
-    val nextMove: MoveIndex?
+    val nextMove: Move?
 )
 
 class MovePath(
     val loanPath: LoanPath,
-    var parent: MovePathIndex? = null,
-    var firstMove: MoveIndex? = null,
-    var firstChild: MovePathIndex? = null,
-    var nextSibling: MovePathIndex? = null
+    var parent: MovePath? = null,
+    var firstMove: Move? = null,
+    var firstChild: MovePath? = null,
+    var nextSibling: MovePath? = null
 )
-
-typealias MoveIndex = Int
-typealias MovePathIndex = Int
 
 enum class MoveKind {
     Declared,   // When declared, variables start out "moved".
@@ -388,7 +385,7 @@ typealias AssignDataFlow = DataFlowContext<AssignDataFlowOperator>
 
 class Assignment(
     // path being assigned
-    val path: MovePathIndex,
+    val path: MovePath,
 
     // where assignment occurs
     val element: RsElement,
