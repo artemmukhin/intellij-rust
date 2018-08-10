@@ -41,14 +41,16 @@ class GatherLoanContext(
     val allLoans: MutableList<Loan>,
     val itemUpperBound: Scope
 ) : Delegate {
+    val gmcx = GatherMoveContext(bccx, moveErrorCollector)
+
     override fun consume(element: RsElement, cmt: Cmt, mode: ConsumeMode) {
-        if (mode is ConsumeMode.Move) gatherMoveFromExpr(bccx, moveData, moveErrorCollector, element, cmt, mode.reason)
+        if (mode is ConsumeMode.Move) gmcx.gatherMoveFromExpr(moveData, element, cmt, mode.reason)
     }
 
     override fun matchedPat(pat: RsPat, cmt: Cmt, mode: MatchMode) {}
 
     override fun consumePat(pat: RsPat, cmt: Cmt, mode: ConsumeMode) {
-        if (mode is ConsumeMode.Move) gatherMoveFromPat(bccx, moveData, moveErrorCollector, pat, cmt)
+        if (mode is ConsumeMode.Move) gmcx.gatherMoveFromPat(moveData, pat, cmt)
     }
 
     override fun borrow(element: RsElement, cmt: Cmt, loanRegion: Region, kind: BorrowKind, cause: LoanCause) {
@@ -56,7 +58,7 @@ class GatherLoanContext(
     }
 
     override fun declarationWithoutInit(element: RsElement) {
-        gatherDeclaration(bccx, moveData, element, element.type)
+        gmcx.gatherDeclaration(moveData, element, element.type)
     }
 
     override fun mutate(assignmentElement: RsElement, assigneeCmt: Cmt, mode: MutateMode) {
@@ -76,7 +78,9 @@ class GatherLoanContext(
         if (cmt.category !is Local) {
             markLoanPathAsMutated(loanPath)
         }
-        gatherAssignment(bccx, moveData, assignment, loanPath, cmt.element, mode)
+
+        val assignmentData = AssignmentData(assignment, loanPath, cmt.element)
+        gmcx.gatherAssignment(moveData, assignmentData, mode)
     }
 
     /** Guarantees that Address([cmt]) will be valid for the duration of static scope, or reports an error. */
@@ -154,7 +158,6 @@ class GatherLoanContext(
                     }
                 }
             }
-
         }
     }
 
@@ -186,6 +189,13 @@ class GatherLoanContext(
         return if (bccx.regionScopeTree.isSubScopeOf(lexicalScope, loanScope)) lexicalScope else loanScope
     }
 }
+
+class AssignmentData(
+    val assignment: RsElement,
+    val loanPath: LoanPath,
+    val assignee: RsElement,
+    val assigneeCmt: Cmt? = null
+)
 
 fun checkAliasability(
     bccx: BorrowCheckContext,
