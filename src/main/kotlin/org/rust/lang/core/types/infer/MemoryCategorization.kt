@@ -8,6 +8,7 @@ package org.rust.lang.core.types.infer
 import org.rust.lang.core.psi.*
 import org.rust.lang.core.psi.ext.RsElement
 import org.rust.lang.core.psi.ext.containerExpr
+import org.rust.lang.core.psi.ext.descendantsOfType
 import org.rust.lang.core.psi.ext.mutability
 import org.rust.lang.core.types.builtinDeref
 import org.rust.lang.core.types.infer.Aliasability.FreelyAliasable
@@ -305,7 +306,19 @@ class MemoryCategorizationContext(
     fun processRvalue(element: RsElement, tempScope: Region, ty: Ty): Cmt =
         Cmt(element, Rvalue(tempScope), Declared, ty)
 
-    fun processPattern(cmt: Cmt, pat: RsPat, callback: (Cmt, RsPat) -> Unit): Boolean {
+    fun processPattern(cmt: Cmt, pat: RsPat, callback: (Cmt, RsPat) -> Unit) {
+        fun processTuplePats(pats: List<RsPat>) {
+            for ((i, subPat) in pats.withIndex()) {
+                val subType = subPat.descendantsOfType<RsPatBinding>().firstOrNull()?.type ?: continue
+                val interior = InteriorField(FieldIndex(i, i.toString()))
+                val subCmt = Cmt(pat, Interior(cmt, interior), cmt.mutabilityCategory.inherit(), subType)
+                processPattern(subCmt, subPat, callback)
+            }
+        }
+
+        // TODO: RsPat doesn't implement RsExpr, and I can't use adjustments and processDeref.
+        // TODO: So how can I get expr from RsPat?
+
         val adjustmentsCount = pat.inference?.adjustments?.get(pat)?.size ?: 0
 
         var cmt = cmt
@@ -315,30 +328,33 @@ class MemoryCategorizationContext(
         callback(cmt, pat)
 
         when (pat) {
-            is RsPatTupleStruct -> {
-            }
+            is RsPatIdent -> pat.pat?.let { processPattern(cmt, it, callback) }
+
+            is RsPatTupleStruct -> processTuplePats(pat.patList)
+
+            is RsPatTup -> processTuplePats(pat.patList)
 
             is RsPatStruct -> {
                 for (patField in pat.patFieldList) {
                     val fieldType = patField.patBinding?.type ?: continue
                     val fieldName = patField.identifier?.text ?: continue
                     val fieldPat = patField.pat ?: continue
-
                     val fieldCmt = cmtOfField(pat, cmt, fieldName, fieldType)
                     processPattern(fieldCmt, fieldPat, callback)
                 }
             }
 
-            is RsPatIdent -> pat.pat?.let { processPattern(cmt, it, callback) }
-
-            is RsPatTuple -> {
-            }
-
             is RsPatSlice -> {
+                val elementCmt = Cmt(
+                    pat,
+                    Interior(cmt, InteriorElement(InteriorOffsetKind.Pattern)),
+                    cmt.mutabilityCategory.inherit(),
+                    cmt.ty
+                )
+
+                pat.patList.forEach { processPattern(elementCmt, it, callback) }
             }
         }
-
-        return true
     }
 
     fun processExprUnadjusted(expr: RsExpr): Cmt =
