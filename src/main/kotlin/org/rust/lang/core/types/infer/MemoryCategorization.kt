@@ -78,7 +78,7 @@ sealed class PointerKind {
 }
 
 sealed class InteriorKind {
-    class InteriorField(val fieldIndex: FieldIndex? = null) : InteriorKind()
+    class InteriorField(val fieldIndex: FieldIndex? = null, val fieldName: String? = null) : InteriorKind()
     class InteriorElement(val offsetKind: InteriorOffsetKind) : InteriorKind()
 }
 
@@ -230,6 +230,14 @@ class MemoryCategorizationContext(
         return Cmt(dotExpr, Interior(baseCmt, InteriorField()), baseCmt.mutabilityCategory.inherit(), type)
     }
 
+    fun cmtOfField(element: RsElement, baseCmt: Cmt, fieldName: String, fieldType: Ty): Cmt =
+        Cmt(
+            element,
+            Interior(baseCmt, InteriorField(fieldName = fieldName)),
+            baseCmt.mutabilityCategory.inherit(),
+            fieldType
+        )
+
     fun processIndexExpr(indexExpr: RsIndexExpr): Cmt {
         val type = indexExpr.type
         val base = indexExpr.containerExpr ?: return Cmt(indexExpr, ty = type)
@@ -289,11 +297,49 @@ class MemoryCategorizationContext(
         return Cmt(expr, Deref(baseCmt, pointerKind), MutabilityCategory.from(pointerKind), derefType)
     }
 
+    // `rvalue_promotable_map` is needed to distinguish rvalues with static region and rvalue with temporary region,
+    // so now all rvalues have static region
     fun processRvalue(expr: RsExpr): Cmt =
         Cmt(expr, Rvalue(ReStatic), Declared, expr.type)
 
     fun processRvalue(element: RsElement, tempScope: Region, ty: Ty): Cmt =
         Cmt(element, Rvalue(tempScope), Declared, ty)
+
+    fun processPattern(cmt: Cmt, pat: RsPat, callback: (Cmt, RsPat) -> Unit): Boolean {
+        val adjustmentsCount = pat.inference?.adjustments?.get(pat)?.size ?: 0
+
+        var cmt = cmt
+        repeat(adjustmentsCount) {
+            cmt = processDeref(pat, cmt)
+        }
+        callback(cmt, pat)
+
+        when (pat) {
+            is RsPatTupleStruct -> {
+            }
+
+            is RsPatStruct -> {
+                for (patField in pat.patFieldList) {
+                    val fieldType = patField.patBinding?.type ?: continue
+                    val fieldName = patField.identifier?.text ?: continue
+                    val fieldPat = patField.pat ?: continue
+
+                    val fieldCmt = cmtOfField(pat, cmt, fieldName, fieldType)
+                    processPattern(fieldCmt, fieldPat, callback)
+                }
+            }
+
+            is RsPatIdent -> pat.pat?.let { processPattern(cmt, it, callback) }
+
+            is RsPatTuple -> {
+            }
+
+            is RsPatSlice -> {
+            }
+        }
+
+        return true
+    }
 
     fun processExprUnadjusted(expr: RsExpr): Cmt =
         when (expr) {

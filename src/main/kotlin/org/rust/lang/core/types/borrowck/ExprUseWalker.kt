@@ -99,6 +99,10 @@ sealed class TrackMatchMode {
             is Definite -> mode
             is Conflicting -> MatchMode.MovingMatch
         }
+
+    fun lub(mode: MatchMode) {
+        // TODO
+    }
 }
 
 enum class MutateMode {
