@@ -10,6 +10,7 @@ import org.rust.lang.core.psi.ext.*
 import org.rust.lang.core.types.borrowck.ConsumeMode.Copy
 import org.rust.lang.core.types.borrowck.ConsumeMode.Move
 import org.rust.lang.core.types.borrowck.MoveReason.DirectRefMove
+import org.rust.lang.core.types.borrowck.MoveReason.PatBindingMove
 import org.rust.lang.core.types.infer.BorrowKind
 import org.rust.lang.core.types.infer.BorrowKind.ImmutableBorrow
 import org.rust.lang.core.types.infer.Cmt
@@ -302,8 +303,8 @@ class ExprUseWalker(
     }
 
     fun armMoveMode(discriminantCmt: Cmt, arm: RsMatchArm): TrackMatchMode {
-        var mode: TrackMatchMode = TrackMatchMode.Unknown
-        arm.patList.forEach { pat -> mode = determinePatMoveMode(discriminantCmt, pat, mode) }
+        val mode: TrackMatchMode = TrackMatchMode.Unknown
+        arm.patList.forEach { determinePatMoveMode(discriminantCmt, it, mode) }
         return mode
     }
 
@@ -314,22 +315,33 @@ class ExprUseWalker(
     }
 
     fun walkIrrefutablePat(discriminantCmt: Cmt, pat: RsPat) {
-        val mode = determinePatMoveMode(discriminantCmt, pat, TrackMatchMode.Unknown)
+        val mode = TrackMatchMode.Unknown
+        determinePatMoveMode(discriminantCmt, pat, mode)
         walkPat(discriminantCmt, pat, mode.matchMode)
     }
 
     // TODO: mc.cat_pattern needed
-    fun determinePatMoveMode(discriminantCmt: Cmt, pat: RsPat, mode: TrackMatchMode): TrackMatchMode {
-        return TrackMatchMode.Unknown
+    fun determinePatMoveMode(discriminantCmt: Cmt, pat: RsPat, mode: TrackMatchMode) {
+        mc.processPattern(discriminantCmt, pat) { patCmt, pat ->
+            if (pat is RsPatIdent) {
+                when (pat.patBinding.kind) {
+                    is RsBindingModeKind.BindByReference -> mode.lub(MatchMode.BorrowingMatch)
+                    is RsBindingModeKind.BindByValue -> {
+                        when (copyOrMove(mc, patCmt, PatBindingMove)) {
+                            is Copy -> mode.lub(MatchMode.CopyingMatch)
+                            is Move -> mode.lub(MatchMode.MovingMatch)
+                        }
+                    }
+                }
+            }
+        }
     }
 
     // TODO: mc.cat_pattern needed
-    fun walkPat(discriminantCmt: Cmt, pat: RsPat, matchMode: MatchMode) {
-    }
+    fun walkPat(discriminantCmt: Cmt, pat: RsPat, matchMode: MatchMode) {}
 
     // TODO: closures support needed
-    fun walkCaptures(closureExpr: RsExpr) {
-    }
+    fun walkCaptures(closureExpr: RsExpr) {}
 }
 
 fun copyOrMove(mc: MemoryCategorizationContext, cmt: Cmt, moveReason: MoveReason): ConsumeMode =
