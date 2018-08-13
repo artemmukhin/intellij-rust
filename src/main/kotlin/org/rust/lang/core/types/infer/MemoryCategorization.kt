@@ -318,14 +318,16 @@ class MemoryCategorizationContext(
 
         // TODO: RsPat doesn't implement RsExpr, and I can't use adjustments and processDeref.
         // TODO: So how can I get expr from RsPat?
-
+        /*
         val adjustmentsCount = pat.inference?.adjustments?.get(pat)?.size ?: 0
-
-        var cmt = cmt
+        var adjustedCmt = cmt
         repeat(adjustmentsCount) {
-            cmt = processDeref(pat, cmt)
+            adjustedCmt = processDeref(pat, adjustedCmt)
         }
-        callback(cmt, pat)
+        callback(adjustedCmt, pat)
+
+        // replace: cmt --> adjustedCmt
+        */
 
         when (pat) {
             is RsPatIdent -> pat.pat?.let { processPattern(cmt, it, callback) }
