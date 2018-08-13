@@ -7,8 +7,13 @@ package org.rust.lang.core.types.borrowck
 
 import org.rust.lang.core.psi.*
 import org.rust.lang.core.psi.ext.*
+import org.rust.lang.core.psi.ext.RsBindingModeKind.BindByReference
+import org.rust.lang.core.psi.ext.RsBindingModeKind.BindByValue
 import org.rust.lang.core.types.borrowck.ConsumeMode.Copy
 import org.rust.lang.core.types.borrowck.ConsumeMode.Move
+import org.rust.lang.core.types.borrowck.LoanCause.RefBinding
+import org.rust.lang.core.types.borrowck.MatchMode.CopyingMatch
+import org.rust.lang.core.types.borrowck.MatchMode.NonBindingMatch
 import org.rust.lang.core.types.borrowck.MoveReason.DirectRefMove
 import org.rust.lang.core.types.borrowck.MoveReason.PatBindingMove
 import org.rust.lang.core.types.infer.BorrowKind
@@ -22,6 +27,7 @@ import org.rust.lang.core.types.regions.Region
 import org.rust.lang.core.types.regions.Scope
 import org.rust.lang.core.types.ty.TyAdt
 import org.rust.lang.core.types.ty.TyFunction
+import org.rust.lang.core.types.ty.TyReference
 import org.rust.lang.core.types.type
 
 interface Delegate {
@@ -74,6 +80,12 @@ enum class LoanCause {
 sealed class ConsumeMode {
     object Copy : ConsumeMode()                          // reference to `x` where `x` has a type that copies
     class Move(val reason: MoveReason) : ConsumeMode()   // reference to `x` where x has a type that moves
+
+    val matchMode: MatchMode
+        get() = when (this) {
+            is Copy -> MatchMode.CopyingMatch
+            is Move -> MatchMode.MovingMatch
+        }
 }
 
 enum class MoveReason {
@@ -101,9 +113,18 @@ sealed class TrackMatchMode {
             is Conflicting -> MatchMode.MovingMatch
         }
 
-    fun lub(mode: MatchMode) {
-        // TODO
-    }
+    fun lub(mode: MatchMode): TrackMatchMode =
+        when {
+            this is Unknown -> Definite(mode)
+            this is Definite && this.mode == mode -> this
+            this is Definite && mode == NonBindingMatch -> this
+            this is Definite && this.mode == NonBindingMatch -> Definite(mode)
+            this is Definite && mode == CopyingMatch -> this
+            this is Definite && this.mode == CopyingMatch -> Definite(mode)
+            this is Definite -> Conflicting
+            this is Conflicting -> this
+            else -> this
+        }
 }
 
 enum class MutateMode {
@@ -239,7 +260,7 @@ class ExprUseWalker(
 
             is RsBlockExpr -> walkBlock(expr.block)
 
-        // TODO?
+            // TODO?
             is RsBreakExpr -> expr.expr?.let { consumeExpr(it) }
 
             is RsCastExpr -> consumeExpr(expr.expr)
@@ -303,8 +324,8 @@ class ExprUseWalker(
     }
 
     fun armMoveMode(discriminantCmt: Cmt, arm: RsMatchArm): TrackMatchMode {
-        val mode: TrackMatchMode = TrackMatchMode.Unknown
-        arm.patList.forEach { determinePatMoveMode(discriminantCmt, it, mode) }
+        var mode: TrackMatchMode = TrackMatchMode.Unknown
+        arm.patList.forEach { mode = determinePatMoveMode(discriminantCmt, it, mode) }
         return mode
     }
 
@@ -315,30 +336,55 @@ class ExprUseWalker(
     }
 
     fun walkIrrefutablePat(discriminantCmt: Cmt, pat: RsPat) {
-        val mode = TrackMatchMode.Unknown
-        determinePatMoveMode(discriminantCmt, pat, mode)
+        val mode = determinePatMoveMode(discriminantCmt, pat, TrackMatchMode.Unknown)
         walkPat(discriminantCmt, pat, mode.matchMode)
     }
 
-    // TODO: mc.cat_pattern needed
-    fun determinePatMoveMode(discriminantCmt: Cmt, pat: RsPat, mode: TrackMatchMode) {
+    /** Identifies any bindings within [pat] whether the overall pattern/match structure is a move, copy, or borrow */
+    fun determinePatMoveMode(discriminantCmt: Cmt, pat: RsPat, mode: TrackMatchMode): TrackMatchMode {
+        var newMode = mode
         mc.processPattern(discriminantCmt, pat) { patCmt, pat ->
             if (pat is RsPatIdent) {
-                when (pat.patBinding.kind) {
-                    is RsBindingModeKind.BindByReference -> mode.lub(MatchMode.BorrowingMatch)
-                    is RsBindingModeKind.BindByValue -> {
-                        when (copyOrMove(mc, patCmt, PatBindingMove)) {
-                            is Copy -> mode.lub(MatchMode.CopyingMatch)
-                            is Move -> mode.lub(MatchMode.MovingMatch)
-                        }
-                    }
+                newMode = when (pat.patBinding.kind) {
+                    is BindByReference -> newMode.lub(MatchMode.BorrowingMatch)
+                    is BindByValue -> newMode.lub(copyOrMove(mc, patCmt, PatBindingMove).matchMode)
+                }
+            }
+        }
+
+        return newMode
+    }
+
+    /**
+     * The core driver for walking a pattern; [matchMode] must be established up front, e.g. via [determinePatMoveMode]
+     * (see also [walkIrrefutablePat] for patterns that stand alone)
+     */
+    fun walkPat(discriminantCmt: Cmt, pat: RsPat, matchMode: MatchMode) {
+        mc.processPattern(discriminantCmt, pat) { patCmt, pat ->
+            if (pat is RsPatIdent) {
+                val patType = pat.patBinding.type
+
+                // TODO: get definition of pat
+                /*
+                let def = Def::Local(canonical_id);
+                if let Ok(ref binding_cmt) = mc.cat_def(pat.id, pat.span, pat_ty, def) {
+                    delegate.mutate(pat.id, pat.span, binding_cmt, MutateMode::Init);
+                }
+                */
+
+                // Each match binding is effectively an assignment to the binding being produced.
+                delegate.mutate(pat, discriminantCmt, MutateMode.Init)
+
+                // It is also a borrow or copy/move of the value being matched.
+                val kind = pat.patBinding.kind
+                if (kind is BindByReference && patType is TyReference) {
+                    delegate.borrow(pat, patCmt, patType.region, BorrowKind.from(kind.mutability), RefBinding)
+                } else if (kind is BindByValue) {
+                    delegate.consumePat(pat, patCmt, copyOrMove(mc, patCmt, PatBindingMove))
                 }
             }
         }
     }
-
-    // TODO: mc.cat_pattern needed
-    fun walkPat(discriminantCmt: Cmt, pat: RsPat, matchMode: MatchMode) {}
 
     // TODO: closures support needed
     fun walkCaptures(closureExpr: RsExpr) {}
