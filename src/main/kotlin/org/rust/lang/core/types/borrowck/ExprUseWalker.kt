@@ -16,10 +16,8 @@ import org.rust.lang.core.types.borrowck.MatchMode.CopyingMatch
 import org.rust.lang.core.types.borrowck.MatchMode.NonBindingMatch
 import org.rust.lang.core.types.borrowck.MoveReason.DirectRefMove
 import org.rust.lang.core.types.borrowck.MoveReason.PatBindingMove
-import org.rust.lang.core.types.infer.BorrowKind
+import org.rust.lang.core.types.infer.*
 import org.rust.lang.core.types.infer.BorrowKind.ImmutableBorrow
-import org.rust.lang.core.types.infer.Cmt
-import org.rust.lang.core.types.infer.MemoryCategorizationContext
 import org.rust.lang.core.types.inference
 import org.rust.lang.core.types.regions.ReEmpty
 import org.rust.lang.core.types.regions.ReScope
@@ -166,22 +164,22 @@ class ExprUseWalker(
         delegateConsume(expr, cmt)
     }
 
-    fun mutateExpr(assignmentExpr: RsExpr, expr: RsExpr, mode: MutateMode) {
+    private fun mutateExpr(assignmentExpr: RsExpr, expr: RsExpr, mode: MutateMode) {
         val cmt = mc.processExpr(expr)
         delegate.mutate(assignmentExpr, cmt, mode)
         walkExpr(expr)
     }
 
-    fun borrowExpr(expr: RsExpr, region: Region, borrowKind: BorrowKind, cause: LoanCause) {
+    private fun borrowExpr(expr: RsExpr, region: Region, borrowKind: BorrowKind, cause: LoanCause) {
         val cmt = mc.processExpr(expr)
         delegate.borrow(expr, cmt, region, borrowKind, cause)
         walkExpr(expr)
     }
 
-    fun selectFromExpr(expr: RsExpr) =
+    private fun selectFromExpr(expr: RsExpr) =
         walkExpr(expr)
 
-    fun walkExpr(expr: RsExpr) {
+    private fun walkExpr(expr: RsExpr) {
         walkAdjustment(expr)
 
         when (expr) {
@@ -253,15 +251,22 @@ class ExprUseWalker(
             }
 
             is RsBinaryExpr -> {
-                // TODO: Assign expressions
-                consumeExpr(expr.left)
-                expr.right?.let { consumeExpr(it) }
+                val left = expr.left
+                val right = expr.right ?: return
+                val operator = expr.binaryOp.operatorType
+                when (operator) {
+                    is AssignmentOp -> mutateExpr(expr, left, MutateMode.JustWrite)
+                    is ArithmeticAssignmentOp -> mutateExpr(expr, left, MutateMode.WriteAndRead)
+                    else -> consumeExpr(left)
+                }
+                consumeExpr(right)
             }
 
             is RsBlockExpr -> walkBlock(expr.block)
 
-            // TODO?
             is RsBreakExpr -> expr.expr?.let { consumeExpr(it) }
+
+            is RsRetExpr -> expr.expr?.let { consumeExpr(it) }
 
             is RsCastExpr -> consumeExpr(expr.expr)
 
@@ -270,12 +275,7 @@ class ExprUseWalker(
     }
 
     fun walkCallee(call: RsExpr, callee: RsExpr) {
-        val calleeType = callee.type
-        when (calleeType) {
-            is TyFunction -> consumeExpr(callee)
-            else -> {
-            } // TODO?
-        }
+        if (callee.type is TyFunction) consumeExpr(callee)
     }
 
     fun walkStmt(stmt: RsStmt) {
@@ -297,25 +297,34 @@ class ExprUseWalker(
         }
     }
 
-    fun walkBlock(block: RsBlock) {
+    private fun walkBlock(block: RsBlock) {
         block.stmtList.forEach { walkStmt(it) }
         block.expr?.let { consumeExpr(it) }
     }
 
-    fun walkStructExpr(fields: List<RsStructLiteralField>, withExpr: RsExpr?) {
+    private fun walkStructExpr(fields: List<RsStructLiteralField>, withExpr: RsExpr?) {
         fields.mapNotNull { it.expr }.forEach { consumeExpr(it) }
+        if (withExpr == null) return
 
-        if (withExpr != null) {
-            val withCmt = mc.processExpr(withExpr)
-            val withType = withCmt.ty
-            if (withType is TyAdt) {
-                // TODO
+        val withCmt = mc.processExpr(withExpr)
+        val withType = withCmt.ty
+        if (withType is TyAdt) {
+            val structFields = (withType.item as? RsStructItem)?.namedFields ?: emptyList()
+            for (field in structFields) {
+                // TODO: use field index instead of identifier
+                val isMentioned = fields.any { it.identifier.text == field.identifier.text }
+                if (!isMentioned) {
+                    val interior = Categorization.Interior(withCmt, InteriorKind.InteriorField(fieldName = field.name))
+                    val fieldCmt = Cmt(withExpr, interior, withCmt.mutabilityCategory.inherit(), withType)
+                    delegateConsume(withExpr, fieldCmt)
+                }
             }
-            walkExpr(withExpr)
         }
+
+        walkExpr(withExpr)
     }
 
-    fun walkAdjustment(expr: RsExpr) {
+    private fun walkAdjustment(expr: RsExpr) {
         val adjustments = expr.inference?.adjustments?.get(expr) ?: emptyList()
         val cmt = mc.processExprUnadjusted(expr)
         for (adjustment in adjustments) {
@@ -323,25 +332,25 @@ class ExprUseWalker(
         }
     }
 
-    fun armMoveMode(discriminantCmt: Cmt, arm: RsMatchArm): TrackMatchMode {
+    private fun armMoveMode(discriminantCmt: Cmt, arm: RsMatchArm): TrackMatchMode {
         var mode: TrackMatchMode = TrackMatchMode.Unknown
         arm.patList.forEach { mode = determinePatMoveMode(discriminantCmt, it, mode) }
         return mode
     }
 
-    fun walkArm(discriminantCmt: Cmt, arm: RsMatchArm, mode: MatchMode) {
+    private fun walkArm(discriminantCmt: Cmt, arm: RsMatchArm, mode: MatchMode) {
         arm.patList.forEach { walkPat(discriminantCmt, it, mode) }
         arm.matchArmGuard?.let { consumeExpr(it.expr) }
         arm.expr?.let { consumeExpr(it) }
     }
 
-    fun walkIrrefutablePat(discriminantCmt: Cmt, pat: RsPat) {
+    private fun walkIrrefutablePat(discriminantCmt: Cmt, pat: RsPat) {
         val mode = determinePatMoveMode(discriminantCmt, pat, TrackMatchMode.Unknown)
         walkPat(discriminantCmt, pat, mode.matchMode)
     }
 
     /** Identifies any bindings within [pat] whether the overall pattern/match structure is a move, copy, or borrow */
-    fun determinePatMoveMode(discriminantCmt: Cmt, pat: RsPat, mode: TrackMatchMode): TrackMatchMode {
+    private fun determinePatMoveMode(discriminantCmt: Cmt, pat: RsPat, mode: TrackMatchMode): TrackMatchMode {
         var newMode = mode
         mc.processPattern(discriminantCmt, pat) { patCmt, pat ->
             if (pat is RsPatIdent) {
@@ -359,7 +368,7 @@ class ExprUseWalker(
      * The core driver for walking a pattern; [matchMode] must be established up front, e.g. via [determinePatMoveMode]
      * (see also [walkIrrefutablePat] for patterns that stand alone)
      */
-    fun walkPat(discriminantCmt: Cmt, pat: RsPat, matchMode: MatchMode) {
+    private fun walkPat(discriminantCmt: Cmt, pat: RsPat, matchMode: MatchMode) {
         mc.processPattern(discriminantCmt, pat) { patCmt, pat ->
             if (pat is RsPatIdent) {
                 val patType = pat.patBinding.type
@@ -387,7 +396,7 @@ class ExprUseWalker(
     }
 
     // TODO: closures support needed
-    fun walkCaptures(closureExpr: RsExpr) {}
+    private fun walkCaptures(closureExpr: RsExpr) {}
 }
 
 fun copyOrMove(mc: MemoryCategorizationContext, cmt: Cmt, moveReason: MoveReason): ConsumeMode =
