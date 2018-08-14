@@ -10,10 +10,7 @@ import org.rust.lang.core.DataFlowContext
 import org.rust.lang.core.DataFlowOperator
 import org.rust.lang.core.KillFrom
 import org.rust.lang.core.psi.*
-import org.rust.lang.core.psi.ext.RsElement
-import org.rust.lang.core.psi.ext.RsItemElement
-import org.rust.lang.core.psi.ext.RsNamedElement
-import org.rust.lang.core.psi.ext.bodyOwnedBy
+import org.rust.lang.core.psi.ext.*
 import org.rust.lang.core.types.borrowck.LoanPathElement.Deref
 import org.rust.lang.core.types.borrowck.LoanPathElement.Interior
 import org.rust.lang.core.types.borrowck.LoanPathKind.*
@@ -90,7 +87,7 @@ data class LoanPath(val kind: LoanPathKind, val ty: Ty) {
 
                 is Categorization.Upvar -> Pair(loanPath(Upvar()), false)
 
-                is Categorization.Local -> Pair(loanPath(Var(cmt.element.localElement)), false)
+                is Categorization.Local -> Pair(loanPath(Var(cmt.element.localElement, cmt.element)), false)
 
                 is Categorization.Deref -> {
                     val (baseLp, baseIsField) = loanPathIsField(category.cmt)
@@ -128,7 +125,7 @@ data class LoanPath(val kind: LoanPathKind, val ty: Ty) {
 }
 
 sealed class LoanPathKind {
-    class Var(val element: RsElement) : LoanPathKind() {
+    class Var(val element: RsElement, val original: RsElement? = null) : LoanPathKind() {
         override fun equals(other: Any?): Boolean {
             if (this === other) return true
             if (javaClass != other?.javaClass) return false
@@ -183,8 +180,10 @@ class BorrowCheckContext(
     }
 
     fun reportUseOfMovedValue(useKind: MovedValueUseKind, loanPath: LoanPath, move: Move, movedLp: LoanPath) {
-        print("###reportUseOfMovedValue: ")
-        println(movedLp.kind)
+        println("###reportUseOfMovedValue###")
+        println("Use of moved value: ${(loanPath.kind as? Var)?.original?.ancestorOrSelf<RsStmt>()?.text}")
+        println("Move happened at: ${move.element.ancestorOrSelf<RsStmt>()?.text}")
+        println()
     }
 
     fun reportReassignedImmutableVariable(loanPath: LoanPath, assignment: Assignment) {

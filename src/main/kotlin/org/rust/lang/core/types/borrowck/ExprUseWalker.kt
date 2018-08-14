@@ -164,6 +164,7 @@ class ExprUseWalker(
     fun consumeExpr(expr: RsExpr) {
         val cmt = mc.processExpr(expr)
         delegateConsume(expr, cmt)
+        walkExpr(expr)
     }
 
     private fun mutateExpr(assignmentExpr: RsExpr, expr: RsExpr, mode: MutateMode) {
@@ -230,8 +231,8 @@ class ExprUseWalker(
 
             is RsIfExpr -> {
                 expr.condition?.expr?.let { consumeExpr(it) }
-                expr.block?.expr?.let { walkExpr(it) }
-                expr.elseBranch?.block?.expr?.let { consumeExpr(it) }
+                expr.block?.let { walkBlock(it) }
+                expr.elseBranch?.block?.let { walkBlock(it) } // TODO: is it right, or maybe consume else branch?
             }
 
             is RsMatchExpr -> {
