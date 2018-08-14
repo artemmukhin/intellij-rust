@@ -11,6 +11,7 @@ import org.rust.lang.core.psi.ext.RsBindingModeKind.BindByReference
 import org.rust.lang.core.psi.ext.RsBindingModeKind.BindByValue
 import org.rust.lang.core.types.borrowck.ConsumeMode.Copy
 import org.rust.lang.core.types.borrowck.ConsumeMode.Move
+import org.rust.lang.core.types.borrowck.LoanCause.AddrOf
 import org.rust.lang.core.types.borrowck.LoanCause.RefBinding
 import org.rust.lang.core.types.borrowck.MatchMode.CopyingMatch
 import org.rust.lang.core.types.borrowck.MatchMode.NonBindingMatch
@@ -23,6 +24,7 @@ import org.rust.lang.core.types.regions.ReEmpty
 import org.rust.lang.core.types.regions.ReScope
 import org.rust.lang.core.types.regions.Region
 import org.rust.lang.core.types.regions.Scope
+import org.rust.lang.core.types.ty.Mutability
 import org.rust.lang.core.types.ty.TyAdt
 import org.rust.lang.core.types.ty.TyFunction
 import org.rust.lang.core.types.ty.TyReference
@@ -187,6 +189,10 @@ class ExprUseWalker(
                 val base = expr.expr ?: return
                 if (expr.mul != null) {
                     selectFromExpr(base)
+                } else if (expr.and != null) {
+                    val exprType = expr.type as? TyReference ?: return
+                    val mutability = Mutability.valueOf(expr.mut != null)
+                    borrowExpr(base, exprType.region, BorrowKind.from(mutability), AddrOf)
                 } else {
                     consumeExpr(base)
                 }
@@ -381,8 +387,11 @@ class ExprUseWalker(
                 }
                 */
 
+                val bindingCmt = mc.processDef(pat, patType)
                 // Each match binding is effectively an assignment to the binding being produced.
-                delegate.mutate(pat, discriminantCmt, MutateMode.Init)
+                if (bindingCmt != null) {
+                    delegate.mutate(pat, bindingCmt, MutateMode.Init)
+                }
 
                 // It is also a borrow or copy/move of the value being matched.
                 val kind = pat.patBinding.kind

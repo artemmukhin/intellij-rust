@@ -6,10 +6,8 @@
 package org.rust.lang.core.types.infer
 
 import org.rust.lang.core.psi.*
-import org.rust.lang.core.psi.ext.RsElement
-import org.rust.lang.core.psi.ext.containerExpr
-import org.rust.lang.core.psi.ext.descendantsOfType
-import org.rust.lang.core.psi.ext.mutability
+import org.rust.lang.core.psi.ext.*
+import org.rust.lang.core.types.borrowck.localElement
 import org.rust.lang.core.types.builtinDeref
 import org.rust.lang.core.types.infer.Aliasability.FreelyAliasable
 import org.rust.lang.core.types.infer.Aliasability.NonAliasable
@@ -21,6 +19,7 @@ import org.rust.lang.core.types.infer.ImmutabilityBlame.*
 import org.rust.lang.core.types.infer.InteriorKind.InteriorElement
 import org.rust.lang.core.types.infer.InteriorKind.InteriorField
 import org.rust.lang.core.types.infer.MutabilityCategory.Declared
+import org.rust.lang.core.types.infer.MutabilityCategory.Immutable
 import org.rust.lang.core.types.infer.PointerKind.BorrowedPointer
 import org.rust.lang.core.types.infer.PointerKind.UnsafePointer
 import org.rust.lang.core.types.inference
@@ -324,10 +323,10 @@ class MemoryCategorizationContext(
         repeat(adjustmentsCount) {
             adjustedCmt = processDeref(pat, adjustedCmt)
         }
-        callback(adjustedCmt, pat)
-
         // replace: cmt --> adjustedCmt
         */
+
+        callback(cmt, pat)
 
         when (pat) {
             is RsPatIdent -> pat.pat?.let { processPattern(cmt, it, callback) }
@@ -357,6 +356,13 @@ class MemoryCategorizationContext(
                 pat.patList.forEach { processPattern(elementCmt, it, callback) }
             }
         }
+    }
+
+    // TODO
+    fun processDef(element: RsElement, exprType: Ty): Cmt? {
+        val def = element.localElement
+        val mutbl = ((def as? RsPatBinding)?.kind as? RsBindingModeKind.BindByValue)?.mutability?.isMut ?: false
+        return Cmt(element, Local(def), if (mutbl) Declared else Immutable, exprType)
     }
 
     fun processExprUnadjusted(expr: RsExpr): Cmt =

@@ -6,10 +6,8 @@
 package org.rust.lang.core.types.borrowck
 
 import org.rust.lang.core.psi.RsBlock
-import org.rust.lang.core.psi.RsFunction
 import org.rust.lang.core.psi.RsPat
 import org.rust.lang.core.psi.ext.RsElement
-import org.rust.lang.core.psi.ext.descendantsOfType
 import org.rust.lang.core.types.borrowck.LoanPathKind.*
 import org.rust.lang.core.types.borrowck.MovedValueUseKind.MovedInCapture
 import org.rust.lang.core.types.borrowck.MovedValueUseKind.MovedInUse
@@ -25,7 +23,6 @@ fun checkLoans(
     allLoans: List<Loan>,
     body: RsBlock
 ) {
-    val owner = body.descendantsOfType<RsFunction>().firstOrNull() ?: return
     val clcx = CheckLoanContext(bccx, dfcxLoans, moveData, allLoans)
     val visitor = ExprUseWalker(clcx, MemoryCategorizationContext(bccx.regionScopeTree))
     visitor.consumeBody(body)

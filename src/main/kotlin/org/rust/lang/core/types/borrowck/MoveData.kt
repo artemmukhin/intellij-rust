@@ -355,7 +355,7 @@ class Move(
     val nextMove: Move?
 )
 
-class MovePath(
+data class MovePath(
     val loanPath: LoanPath,
     var parent: MovePath? = null,
     var firstMove: Move? = null,

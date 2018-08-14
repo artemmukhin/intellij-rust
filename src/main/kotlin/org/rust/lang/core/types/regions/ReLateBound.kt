@@ -8,4 +8,4 @@ package org.rust.lang.core.types.regions
 /**
  * Region bound in a function scope, which will be substituted when the function is called.
  */
-class ReLateBound(index: DeBruijnIndex) : Region()
+// class ReLateBound(index: DeBruijnIndex) : Region()

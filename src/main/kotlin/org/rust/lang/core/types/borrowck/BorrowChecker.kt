@@ -9,9 +9,10 @@ import org.rust.lang.core.ControlFlowGraph
 import org.rust.lang.core.DataFlowContext
 import org.rust.lang.core.DataFlowOperator
 import org.rust.lang.core.KillFrom
-import org.rust.lang.core.psi.RsBlock
-import org.rust.lang.core.psi.RsFunction
+import org.rust.lang.core.psi.*
 import org.rust.lang.core.psi.ext.RsElement
+import org.rust.lang.core.psi.ext.RsItemElement
+import org.rust.lang.core.psi.ext.RsNamedElement
 import org.rust.lang.core.psi.ext.bodyOwnedBy
 import org.rust.lang.core.types.borrowck.LoanPathElement.Deref
 import org.rust.lang.core.types.borrowck.LoanPathElement.Interior
@@ -89,7 +90,7 @@ data class LoanPath(val kind: LoanPathKind, val ty: Ty) {
 
                 is Categorization.Upvar -> Pair(loanPath(Upvar()), false)
 
-                is Categorization.Local -> Pair(loanPath(Var(cmt.element)), false)
+                is Categorization.Local -> Pair(loanPath(Var(cmt.element.localElement)), false)
 
                 is Categorization.Deref -> {
                     val (baseLp, baseIsField) = loanPathIsField(category.cmt)
@@ -127,10 +128,26 @@ data class LoanPath(val kind: LoanPathKind, val ty: Ty) {
 }
 
 sealed class LoanPathKind {
-    class Var(val element: RsElement) : LoanPathKind()
+    class Var(val element: RsElement) : LoanPathKind() {
+        override fun equals(other: Any?): Boolean {
+            if (this === other) return true
+            if (javaClass != other?.javaClass) return false
+
+            other as Var
+
+            if (element.localElement != other.element.localElement) return false
+
+            return true
+        }
+
+        override fun hashCode(): Int {
+            return element.localElement.hashCode()
+        }
+    }
+
     class Upvar : LoanPathKind()
-    class Downcast(val loanPath: LoanPath, val element: RsElement) : LoanPathKind()
-    class Extend(val loanPath: LoanPath, val mutCategory: MutabilityCategory, val lpElement: LoanPathElement) : LoanPathKind()
+    data class Downcast(val loanPath: LoanPath, val element: RsElement) : LoanPathKind()
+    data class Extend(val loanPath: LoanPath, val mutCategory: MutabilityCategory, val lpElement: LoanPathElement) : LoanPathKind()
 }
 
 sealed class LoanPathElement {
@@ -151,30 +168,34 @@ class BorrowCheckContext(
 ) {
     fun isSubregionOf(sub: Region, sup: Region): Boolean {
         val freeRegions = FreeRegionMap() // TODO
-        val regionRelations = RegionRelations(owner, regionScopeTree, freeRegions)
+        val regionRelations = RegionRelations(owner as RsItemElement, regionScopeTree, freeRegions)
         return regionRelations.isSubRegionOf(sub, sup)
     }
 
     fun report(error: BorrowCheckError) {
-        // TODO
+        print("###report: ")
+        println(error)
     }
 
     fun reportAliasabilityViolation(cause: AliasableViolationKind, reason: AliasableReason, cmt: Cmt) {
-        // TODO
+        print("###reportAliasabilityViolation: ")
+        println(cause)
     }
 
     fun reportUseOfMovedValue(useKind: MovedValueUseKind, loanPath: LoanPath, move: Move, movedLp: LoanPath) {
-        // TODO
+        print("###reportUseOfMovedValue: ")
+        println(movedLp.kind)
     }
 
     fun reportReassignedImmutableVariable(loanPath: LoanPath, assignment: Assignment) {
-        // TODO
+        print("###reportReassignedImmutableVariable: ")
+        println(loanPath.kind)
     }
 }
 
 fun borrowck(owner: RsElement): BorrowCheckResult? {
     val body = owner.bodyOwnedBy ?: return null
-    val regoionScopeTree = getRegionScopeTree(owner)
+    val regoionScopeTree = getRegionScopeTree(owner as RsItemElement)
     val bccx = BorrowCheckContext(regoionScopeTree, owner, body)
 
     val data = buildBorrowckDataflowData(bccx, false, body)
@@ -225,3 +246,12 @@ class BorrowCheckError(
     val cmt: Cmt,
     val code: BorrowCheckErrorCode
 )
+
+val RsElement.localElement: RsElement
+    get() = when (this) {
+        is RsNamedElement -> this
+        is RsPath -> this.reference.resolve() ?: this
+        is RsPathExpr -> path.localElement
+        is RsPatIdent -> patBinding.localElement
+        else -> (this.reference as? RsElement)?.localElement ?: this
+    }

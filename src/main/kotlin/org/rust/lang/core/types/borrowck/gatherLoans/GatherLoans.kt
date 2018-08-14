@@ -108,6 +108,7 @@ class GatherLoanContext(
             is ReEarlyBound -> bccx.regionScopeTree.getEarlyFreeScope(loanRegion)
             is ReFree -> bccx.regionScopeTree.getFreeScope(loanRegion)
             is ReStatic -> itemUpperBound
+            is ReUnknown -> itemUpperBound
             else -> return // invalid borrow lifetime
         }
 
