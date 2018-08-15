@@ -120,5 +120,5 @@ class GatherMoveContext(val bccx: BorrowCheckContext, val moveErrorCollector: Mo
     }
 }
 
-// TODO
+// TODO: use ImplLookup
 val RsStructOrEnumItemElement.hasDestructor: Boolean get() = true

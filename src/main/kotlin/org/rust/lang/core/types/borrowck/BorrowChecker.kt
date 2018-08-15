@@ -11,6 +11,7 @@ import org.rust.lang.core.DataFlowOperator
 import org.rust.lang.core.KillFrom
 import org.rust.lang.core.psi.*
 import org.rust.lang.core.psi.ext.*
+import org.rust.lang.core.resolve.ImplLookup
 import org.rust.lang.core.types.borrowck.LoanPathElement.Deref
 import org.rust.lang.core.types.borrowck.LoanPathElement.Interior
 import org.rust.lang.core.types.borrowck.LoanPathKind.*
@@ -170,6 +171,7 @@ class BorrowCheckContext(
     val regionScopeTree: ScopeTree,
     val owner: RsElement,
     val body: RsBlock,
+    val implLookup: ImplLookup = ImplLookup.relativeTo(body),
     val usedMutNodes: MutableSet<RsElement> = mutableSetOf()
 ) {
     fun isSubregionOf(sub: Region, sup: Region): Boolean {

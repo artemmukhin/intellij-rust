@@ -24,7 +24,7 @@ fun checkLoans(
     body: RsBlock
 ) {
     val clcx = CheckLoanContext(bccx, dfcxLoans, moveData, allLoans)
-    val visitor = ExprUseWalker(clcx, MemoryCategorizationContext(bccx.regionScopeTree))
+    val visitor = ExprUseWalker(clcx, MemoryCategorizationContext(bccx.regionScopeTree, bccx.implLookup.ctx))
     visitor.consumeBody(body)
 }
 

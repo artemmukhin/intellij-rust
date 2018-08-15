@@ -6,7 +6,6 @@
 package org.rust.lang.core.types.regions
 
 import org.rust.lang.core.psi.ext.RsItemElement
-import org.rust.lang.core.types.infer.RsInferenceContext
 import org.rust.lang.core.types.infer.outlives.FreeRegionMap
 
 /**
@@ -35,6 +34,7 @@ data class RegionRelations(
     fun isSubRegionOf(sub: Region, sup: Region): Boolean {
         if (sub == sup) return true
         val result = when {
+            sub == ReUnknown || sup == ReUnknown -> true
             sub === ReEmpty && sup === ReStatic -> true
             sub is ReScope && sup is ReScope ->
                 regionScopeTree.isSubScopeOf(sub.scope, sup.scope)
