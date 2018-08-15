@@ -5,7 +5,7 @@
 
 package org.rust.lang.core.types.regions
 
-import org.rust.lang.core.psi.ext.RsElement
+import org.rust.lang.core.psi.ext.RsItemElement
 import org.rust.lang.core.types.Kind
 import org.rust.lang.core.types.TypeFlags
 import org.rust.lang.core.types.infer.TypeFoldable
@@ -24,21 +24,12 @@ abstract class Region : Kind, TypeFoldable<Region> {
 }
 
 sealed class BoundRegion {
-    /** An anonymous region parameter for a given fn (&T) */
-    data class Anon(val i: Int) : BoundRegion()
+    /** An anonymous region parameter for a given fn (&T). */
+    data class Anon(val index: Int) : BoundRegion()
 
-    /** Named region parameters for functions (a in &'a T) */
-    data class Named(val element: RsElement) : BoundRegion()
+    /** Named region parameters for functions (a in &'a T). */
+    data class Named(val item: RsItemElement, val name: String) : BoundRegion()
 
-    /** Fresh bound identifiers created during GLB computations */
-    data class Fresh(val i: Int) : BoundRegion()
-
-    /** Anonymous region for the implicit env pointer parameter to a closure */
-    object Env : BoundRegion()
+    /** Fresh bound identifiers created during GLB computations. */
+    data class Fresh(val index: Int) : BoundRegion()
 }
-
-/**
- * A De Bruijn index is a standard means of representing regions (and perhaps later types) in a higher-ranked setting.
- * http://en.wikipedia.org/wiki/De_Bruijn_index
- */
-data class DeBruijnIndex(val depth: Int, val bound: BoundRegion)

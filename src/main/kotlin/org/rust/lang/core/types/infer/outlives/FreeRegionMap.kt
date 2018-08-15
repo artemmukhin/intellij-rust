@@ -15,7 +15,7 @@ class FreeRegionMap {
      * Stores the relation `a < b`, where `a` and `b` are regions.
      * Invariant: only free regions like `'x` or `'static` are stored in this relation, not scopes.
      */
-    private val relation: MutableSet<Pair<Region, Region>> = mutableSetOf()
+    private val relation: TransitiveRelation<Region> = TransitiveRelation()
 
     fun isEmpty(): Boolean = relation.isEmpty()
 
@@ -25,7 +25,7 @@ class FreeRegionMap {
      */
     fun relateRegions(sub: Region, sup: Region) {
         if (isFreeOrStatic(sub) && isFree(sup)) {
-            relation.add(Pair(sub, sup))
+            relation.add(sub, sup)
         }
     }
 
@@ -38,17 +38,17 @@ class FreeRegionMap {
         return if (region1 == region2) {
             region1
         } else {
-            /* relation.postdomUpperBound() ?: */ ReStatic
+            relation.getPostdomUpperBound(region1, region2) ?: ReStatic
         }
     }
 
     /** Tests whether `[sub] <= [sup]`. Both must be free regions or `'static`. */
     fun isFreeSubRegionOf(sub: Region, sup: Region): Boolean {
         require(isFreeOrStatic(sub) && isFreeOrStatic(sup))
-        return sup == ReStatic || sub == sup || relation.contains(Pair(sub, sup))
+        return sup == ReStatic || sub == sup || relation.contains(sub, sup)
     }
 }
 
-fun isFree(region: Region): Boolean = region is ReEarlyBound || region is ReFree
+private fun isFree(region: Region): Boolean = region is ReEarlyBound || region is ReFree
 
-fun isFreeOrStatic(region: Region): Boolean = isFree(region) || region === ReStatic
+private fun isFreeOrStatic(region: Region): Boolean = isFree(region) || region === ReStatic

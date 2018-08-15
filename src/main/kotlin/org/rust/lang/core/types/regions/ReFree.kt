@@ -5,34 +5,33 @@
 
 package org.rust.lang.core.types.regions
 
-import org.rust.lang.core.psi.ext.RsElement
+import org.rust.lang.core.psi.ext.RsItemElement
+import org.rust.lang.core.types.infer.RsInferenceContext
 import org.rust.lang.core.types.infer.outlives.FreeRegionMap
 
 /**
- * A "free" region can be interpreted as "some region at least as big as the scope of [element]".
+ * A "free" region can be interpreted as "some region at least as big as the scope of [item]".
  * When checking a function body, the types of all arguments and so forth that refer to bound region parameters are
  * modified to refer to free region parameters.
  */
-data class ReFree(val element: RsElement, val boundRegion: BoundRegion) : Region()
+data class ReFree(val item: RsItemElement, val bound: BoundRegion) : Region()
 
 /**
  * Combines a [ScopeTree] (which governs relationships between scopes) and a [FreeRegionMap] (which governs
  * relationships between free regions) to yield a complete relation between concrete regions.
  */
 data class RegionRelations(
-    // val inferenceContext: RsInferenceContext,
+    /** Context used to fetch the region maps. */
+    val item: RsItemElement,
 
-    // context used to fetch the region maps
-    val context: RsElement,
-
-    // region maps for the given context
+    /** Region maps for the given context. */
     val regionScopeTree: ScopeTree,
 
-    // free-region relationships
+    /** Free-region relationships. */
     val freeRegions: FreeRegionMap
 ) {
 
-    /** Determines whether one region is a subRegion of another. */
+    /** Determines whether one region is a subregion of another. */
     fun isSubRegionOf(sub: Region, sup: Region): Boolean {
         if (sub == sup) return true
         val result = when {
@@ -54,14 +53,14 @@ data class RegionRelations(
         return result || isStatic(sup)
     }
 
-    /** Determines whether this free-region is required to be 'static */
-    fun isStatic(supRegion: Region): Boolean =
-        when (supRegion) {
-            is ReStatic -> true
-            is ReEarlyBound, is ReFree -> freeRegions.isFreeSubRegionOf(ReStatic, supRegion)
-            else -> false
-        }
-
     fun getLeastUpperBoundOfFreeRegions(region1: Region, region2: Region) =
         freeRegions.getLeastUpperBoundOfFreeRegions(region1, region2)
+
+    /** Determines whether this free-region is required to be 'static. */
+    private fun isStatic(sup: Region): Boolean =
+        when (sup) {
+            is ReStatic -> true
+            is ReEarlyBound, is ReFree -> freeRegions.isFreeSubRegionOf(ReStatic, sup)
+            else -> false
+        }
 }
