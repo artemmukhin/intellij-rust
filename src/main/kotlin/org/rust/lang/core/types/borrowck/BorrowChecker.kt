@@ -211,7 +211,6 @@ fun borrowck(owner: RsElement): BorrowCheckResult? {
         checkLoans(bccx, data.loans, data.moveData, data.allLoans, body)
         // TODO: implement and call `unusedCheck(borrowCheckContext, body)`
     }
-
     return BorrowCheckResult(bccx.usedMutNodes)
 }
 
