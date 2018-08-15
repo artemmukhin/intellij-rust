@@ -184,4 +184,25 @@ class RsTypeCheckInspectionTest : RsInspectionsTestBase(RsTypeCheckInspection())
             x;
         }
     """)
+
+    fun `test borrowck move by assign 2`() = checkByText("""
+        fn main() {
+            let mut x = 1;
+            let mut y = 2;
+            y = x;
+            x;
+        }
+    """)
+
+    fun `test borrowck move from raw pointer`() = checkByText("""
+        struct S { data: i32 }
+        unsafe fn foo(x: *const S) -> S {
+            let y;
+            y = *x; //~ ERROR cannot move out of dereference of raw pointer
+            return y;
+        }
+
+        fn main() {
+        }
+    """)
 }

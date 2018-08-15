@@ -30,7 +30,7 @@ fun gatherLoansInFn(bccx: BorrowCheckContext, body: RsBlock): Pair<List<Loan>, M
     val glcx = GatherLoanContext(bccx, MoveData(), MoveErrorCollector(), mutableListOf(), Scope.Node(body))
     val visitor = ExprUseWalker(glcx, MemoryCategorizationContext(bccx.regionScopeTree, bccx.implLookup.ctx))
     visitor.consumeBody(bccx.body)
-    // glcx.reportPotentialErrors()
+    glcx.moveErrorCollector.reportErrors()
     return Pair(glcx.allLoans, glcx.moveData)
 }
 
