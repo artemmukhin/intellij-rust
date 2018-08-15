@@ -205,4 +205,13 @@ class RsTypeCheckInspectionTest : RsInspectionsTestBase(RsTypeCheckInspection())
         fn main() {
         }
     """)
+
+    fun `test borrowck move from array`() = checkByText("""
+        struct S { data: i32 }
+
+        fn main() {
+            let arr: [S; 1] = [S {data: 1}];
+            let x = arr[0];
+        }
+    """)
 }
