@@ -150,4 +150,39 @@ class RsTypeCheckInspectionTest : RsInspectionsTestBase(RsTypeCheckInspection())
             }
         }
     """)
+
+    fun `test borrowck borrow`() = checkByText("""
+        struct S { data: i32 }
+
+        fn main() {
+            let mut x: S = S { data: 42 };
+            let y = &mut x;
+            x;
+        }
+    """)
+
+    fun `test borrowck move by call`() = checkByText("""
+        struct S { data: i32 }
+
+        fn f(s: S) {}
+
+        fn main() {
+            let mut x: S = S { data: 42 };
+            let mut i = 0;
+            while i < 10 {
+                if x.data > 10 { f(x); } else {}
+                i += 1;
+            }
+            // f(x);
+            x;
+        }
+    """)
+
+    fun `test borrowck move by assign`() = checkByText("""
+        fn main() {
+            let mut x = 1;
+            let y = x;
+            x;
+        }
+    """)
 }

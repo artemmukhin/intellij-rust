@@ -48,7 +48,7 @@ data class LoanPath(val kind: LoanPathKind, val ty: Ty) {
 
     fun killScope(bccx: BorrowCheckContext): Scope =
         when (kind) {
-            is Var -> bccx.regionScopeTree.getVariableScope(kind.element)
+            is Var -> bccx.regionScopeTree.getVariableScope(kind.element.localElement as RsPatBinding)!!
             is Upvar -> TODO("not implemented")
             is Downcast -> kind.loanPath.killScope(bccx)
             is Extend -> kind.loanPath.killScope(bccx)

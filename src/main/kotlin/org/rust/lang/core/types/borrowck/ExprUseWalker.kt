@@ -144,7 +144,7 @@ class ExprUseWalker(
             val parameterType = parameter.typeReference?.type ?: continue
             val parameterPat = parameter.pat ?: continue
 
-            val bodyScopeRegion = ReScope(Scope.createNode(body))
+            val bodyScopeRegion = ReScope(Scope.Node(body))
             val parameterCmt = mc.processRvalue(parameter, bodyScopeRegion, parameterType)
 
             walkIrrefutablePat(parameterCmt, parameterPat)

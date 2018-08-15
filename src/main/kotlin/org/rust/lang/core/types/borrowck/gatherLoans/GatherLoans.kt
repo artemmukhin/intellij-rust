@@ -27,7 +27,7 @@ import org.rust.lang.core.types.ty.TyUnknown
 import org.rust.lang.core.types.type
 
 fun gatherLoansInFn(bccx: BorrowCheckContext, body: RsBlock): Pair<List<Loan>, MoveData> {
-    val glcx = GatherLoanContext(bccx, MoveData(), MoveErrorCollector(), mutableListOf(), Scope.createNode(body))
+    val glcx = GatherLoanContext(bccx, MoveData(), MoveErrorCollector(), mutableListOf(), Scope.Node(body))
     val visitor = ExprUseWalker(glcx, MemoryCategorizationContext(bccx.regionScopeTree))
     visitor.consumeBody(bccx.body)
     // glcx.reportPotentialErrors()
@@ -112,7 +112,7 @@ class GatherLoanContext(
             else -> return // invalid borrow lifetime
         }
 
-        val borrowScope = Scope.createNode(element)
+        val borrowScope = Scope.Node(element)
         val genScope = computeGenScope(borrowScope, loanScope)
         val killScope = computeKillScope(loanScope, loanPath)
 

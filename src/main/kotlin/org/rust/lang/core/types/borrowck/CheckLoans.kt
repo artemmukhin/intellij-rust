@@ -166,7 +166,7 @@ class CheckLoanContext(
     private fun checkAssignment(assignmentElement: RsElement, assigneeCmt: Cmt) {
         // Check that we don't invalidate any outstanding loans
         LoanPath.computeFor(assigneeCmt)?.let { loanPath ->
-            val scope = Scope.createNode(assignmentElement)
+            val scope = Scope.Node(assignmentElement)
             eachInScopeLoanAffectingPath(scope, loanPath) { loan ->
                 reportIllegalMutation(loanPath, loan)
                 false
@@ -263,7 +263,7 @@ class CheckLoanContext(
 
     private fun analyzeRestrictionsOnUse(element: RsElement, usePath: LoanPath, borrowKind: BorrowKind): UseError {
         var result: UseError = UseError.OK
-        eachInScopeLoanAffectingPath(Scope.createNode(element), usePath) { loan ->
+        eachInScopeLoanAffectingPath(Scope.Node(element), usePath) { loan ->
             if (!BorrowKind.isCompatible(loan.kind, borrowKind)) {
                 result = UseError.WhileBorrowed(loan.loanPath)
                 false
@@ -278,7 +278,7 @@ class CheckLoanContext(
     /** Checks whether [oldLoan] and [newLoan] can safely be issued simultaneously. */
     private fun reportErrorIfLoansConflict(oldLoan: Loan, newLoan: Loan): Boolean {
         // Should only be called for loans that are in scope at the same time.
-        testAssert { bccx.regionScopeTree.areScopesIntersect(oldLoan.killScope, newLoan.killScope) }
+        testAssert { bccx.regionScopeTree.intersects(oldLoan.killScope, newLoan.killScope) }
 
         val errorOldNew = reportErrorIfLoanConflictsWithRestriction(oldLoan, newLoan, oldLoan, newLoan)
         val errorNewOld = reportErrorIfLoanConflictsWithRestriction(newLoan, oldLoan, oldLoan, newLoan)

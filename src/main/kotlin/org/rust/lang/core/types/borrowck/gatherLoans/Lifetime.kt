@@ -5,12 +5,10 @@
 
 package org.rust.lang.core.types.borrowck.gatherLoans
 
+import org.rust.lang.core.psi.RsPatBinding
 import org.rust.lang.core.psi.ext.RsElement
+import org.rust.lang.core.types.borrowck.*
 import org.rust.lang.core.types.borrowck.AliasableViolationKind.BorrowViolation
-import org.rust.lang.core.types.borrowck.BorrowCheckContext
-import org.rust.lang.core.types.borrowck.BorrowCheckError
-import org.rust.lang.core.types.borrowck.BorrowCheckErrorCode
-import org.rust.lang.core.types.borrowck.LoanCause
 import org.rust.lang.core.types.infer.Categorization.*
 import org.rust.lang.core.types.infer.Cmt
 import org.rust.lang.core.types.infer.PointerKind.BorrowedPointer
@@ -54,7 +52,7 @@ class GuaranteeLifetimeContext(
             is Rvalue -> category.region
             is StaticItem -> ReStatic
             is Upvar -> ReScope(itemScope)
-            is Local -> ReScope(bccx.regionScopeTree.getVariableScope(category.element))
+            is Local -> ReScope(bccx.regionScopeTree.getVariableScope(category.element.localElement as RsPatBinding)!!)
             is Deref -> {
                 val pointerKind = category.pointerKind
                 when (pointerKind) {
