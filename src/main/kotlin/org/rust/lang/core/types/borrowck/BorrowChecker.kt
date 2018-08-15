@@ -73,6 +73,18 @@ data class LoanPath(val kind: LoanPathKind, val ty: Ty) {
         }
     }
 
+    val containingStmtText: String?
+        get() = when (kind) {
+            is LoanPathKind.Var -> kind.original?.ancestorOrSelf<RsStmt>()?.text
+            is LoanPathKind.Upvar -> ""
+            is LoanPathKind.Downcast -> kind.element.ancestorOrSelf<RsStmt>()?.text
+            is LoanPathKind.Extend -> {
+                val baseText = (kind.loanPath.kind as? LoanPathKind.Var)?.original?.text
+                val fieldText = ((kind.lpElement as? Interior)?.kind as InteriorKind.InteriorField).fieldName
+                "$baseText.$fieldText"
+            }
+        }
+
     companion object {
         fun computeFor(cmt: Cmt): LoanPath? =
             loanPathIsField(cmt).first
@@ -152,9 +164,6 @@ sealed class LoanPathElement {
     data class Interior(val element: RsElement?, val kind: InteriorKind) : LoanPathElement()
 }
 
-fun checkFunction(function: RsFunction): BorrowCheckResult? =
-    borrowck(function)
-
 class BorrowCheckResult(val usedMutNodes: MutableSet<RsElement>)
 
 class BorrowCheckContext(
@@ -181,7 +190,7 @@ class BorrowCheckContext(
 
     fun reportUseOfMovedValue(useKind: MovedValueUseKind, loanPath: LoanPath, move: Move, movedLp: LoanPath) {
         println("###reportUseOfMovedValue###")
-        println("Use of moved value: ${(loanPath.kind as? Var)?.original?.ancestorOrSelf<RsStmt>()?.text}")
+        println("Use of moved value: ${loanPath.containingStmtText}")
         println("Move happened at: ${move.element.ancestorOrSelf<RsStmt>()?.text}")
         println()
     }

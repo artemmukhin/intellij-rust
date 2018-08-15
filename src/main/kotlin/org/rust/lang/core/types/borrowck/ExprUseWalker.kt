@@ -321,7 +321,7 @@ class ExprUseWalker(
                 // TODO: use field index instead of identifier
                 val isMentioned = fields.any { it.identifier.text == field.identifier.text }
                 if (!isMentioned) {
-                    val interior = Categorization.Interior(withCmt, InteriorKind.InteriorField(fieldName = field.name))
+                    val interior = Categorization.Interior(withCmt, InteriorKind.InteriorField(field.name))
                     val fieldCmt = Cmt(withExpr, interior, withCmt.mutabilityCategory.inherit(), withType)
                     delegateConsume(withExpr, fieldCmt)
                 }

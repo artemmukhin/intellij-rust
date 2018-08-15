@@ -78,7 +78,7 @@ sealed class PointerKind {
 }
 
 sealed class InteriorKind {
-    class InteriorField(val fieldIndex: FieldIndex? = null, val fieldName: String? = null) : InteriorKind()
+    class InteriorField(val fieldName: String?) : InteriorKind()
     class InteriorElement(val offsetKind: InteriorOffsetKind) : InteriorKind()
 }
 
@@ -86,8 +86,6 @@ enum class InteriorOffsetKind {
     Index,
     Pattern
 }
-
-class FieldIndex(index: Int, name: String?)
 
 sealed class ImmutabilityBlame {
     class ImmutableLocal(val element: RsElement) : ImmutabilityBlame()
@@ -227,13 +225,14 @@ class MemoryCategorizationContext(
         val type = dotExpr.type
         val base = dotExpr.expr
         val baseCmt = processExpr(base)
-        return Cmt(dotExpr, Interior(baseCmt, InteriorField()), baseCmt.mutabilityCategory.inherit(), type)
+        val fieldName = dotExpr.fieldLookup?.identifier?.text
+        return Cmt(dotExpr, Interior(baseCmt, InteriorField(fieldName)), baseCmt.mutabilityCategory.inherit(), type)
     }
 
     fun cmtOfField(element: RsElement, baseCmt: Cmt, fieldName: String, fieldType: Ty): Cmt =
         Cmt(
             element,
-            Interior(baseCmt, InteriorField(fieldName = fieldName)),
+            Interior(baseCmt, InteriorField(fieldName)),
             baseCmt.mutabilityCategory.inherit(),
             fieldType
         )
@@ -309,7 +308,7 @@ class MemoryCategorizationContext(
         fun processTuplePats(pats: List<RsPat>) {
             for ((i, subPat) in pats.withIndex()) {
                 val subType = subPat.descendantsOfType<RsPatBinding>().firstOrNull()?.type ?: continue
-                val interior = InteriorField(FieldIndex(i, i.toString()))
+                val interior = InteriorField(i.toString())
                 val subCmt = Cmt(pat, Interior(cmt, interior), cmt.mutabilityCategory.inherit(), subType)
                 processPattern(subCmt, subPat, callback)
             }

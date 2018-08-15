@@ -14,8 +14,11 @@ import org.rust.lang.core.types.borrowck.LoanPathElement.Interior
 import org.rust.lang.core.types.borrowck.LoanPathKind.*
 import org.rust.lang.core.types.borrowck.gatherLoans.RestrictionResult.Safe
 import org.rust.lang.core.types.borrowck.gatherLoans.RestrictionResult.SafeIf
-import org.rust.lang.core.types.infer.*
+import org.rust.lang.core.types.infer.BorrowKind
+import org.rust.lang.core.types.infer.Categorization
+import org.rust.lang.core.types.infer.Cmt
 import org.rust.lang.core.types.infer.InteriorKind.InteriorField
+import org.rust.lang.core.types.infer.PointerKind
 import org.rust.lang.core.types.regions.Region
 import org.rust.lang.core.types.ty.TyAdt
 import org.rust.lang.core.types.ty.TyUnknown
@@ -69,7 +72,7 @@ class RestrictionContext(val bccx: BorrowCheckContext, val loanRegion: Region, v
 
                 fun processFields(item: RsStructItem, result: SafeIf) {
                     item.namedFields.forEachIndexed { i, field ->
-                        val fieldInteriorKind = InteriorField(FieldIndex(i, field.name))
+                        val fieldInteriorKind = InteriorField(field.name)
                         val fieldType = if (fieldInteriorKind == interiorKind) cmt.ty else TyUnknown
                         val siblingLpKind = Extend(result.loanPath, cmt.mutabilityCategory, Interior(variant, fieldInteriorKind))
                         val siblingLp = LoanPath(siblingLpKind, fieldType)

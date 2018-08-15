@@ -19,7 +19,6 @@ import org.rust.lang.core.psi.ext.kind
 import org.rust.lang.core.psi.ext.namedFields
 import org.rust.lang.core.types.borrowck.LoanPathElement.Interior
 import org.rust.lang.core.types.borrowck.LoanPathKind.*
-import org.rust.lang.core.types.infer.FieldIndex
 import org.rust.lang.core.types.infer.InteriorKind
 import org.rust.lang.core.types.ty.TyAdt
 import org.rust.lang.core.types.ty.TyUnknown
@@ -168,7 +167,7 @@ class MoveData(
 
         // Moving/assigning one union field automatically moves/assigns all its fields
         union.namedFields.forEachIndexed { i, field ->
-            val fieldInteriorKind = InteriorKind.InteriorField(FieldIndex(i, field.name))
+            val fieldInteriorKind = InteriorKind.InteriorField(field.name)
             val fieldType = if (fieldInteriorKind == interiorKind) loanPath.ty else TyUnknown
             if (fieldInteriorKind != interiorKind) {
                 val siblingLpKind = Extend(base, mutCat, Interior(variant, fieldInteriorKind))

@@ -167,13 +167,12 @@ class RsTypeCheckInspectionTest : RsInspectionsTestBase(RsTypeCheckInspection())
         fn f(s: S) {}
 
         fn main() {
-            let mut x: S = S { data: 42 };
+            let x: S = S { data: 42 };
             let mut i = 0;
             while i < 10 {
                 if x.data > 10 { f(x); } else {}
                 i += 1;
             }
-            // f(x);
             x;
         }
     """)
