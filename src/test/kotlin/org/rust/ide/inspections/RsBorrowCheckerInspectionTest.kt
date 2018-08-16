@@ -349,4 +349,73 @@ class RsBorrowCheckerInspectionTest : RsInspectionsTestBase(RsBorrowCheckerInspe
             let c = &mut b[0];
         }
     """)
+
+    fun `test borrowck move by call`() = checkByText("""
+        struct S { data: i32 }
+
+        fn f(s: S) {}
+
+        fn main() {
+            let x = S { data: 42 };
+            let mut i = 0;
+            while i < 10 {
+                if <error descr="Use of moved value">x.data</error> == 10 { f(<error descr="Use of moved value">x</error>); } else {}
+                i += 1;
+            }
+            <error descr="Use of moved value">x</error>;
+        }
+    """)
+
+    fun `test borrowck move by assign`() = checkByText("""
+        struct S { data: i32 }
+
+        fn main() {
+            let x = S { data: 42 };
+            let y = x;
+            <error descr="Use of moved value">x</error>;
+        }
+    """)
+
+    fun `test borrowck move by assign 2`() = checkByText("""
+        struct S { data: i32 }
+
+        fn main() {
+            let x = S { data: 42 };
+            let mut y = 2;
+            y = x;
+            <error descr="Use of moved value">x</error>;
+        }
+    """)
+
+    fun `test borrowck move from raw pointer`() = checkByText("""
+        struct S { data: i32 }
+
+        unsafe fn foo(x: *const S) -> S {
+            let y;
+            y = <error descr="Cannot move">*x</error>;
+            return y;
+        }
+
+        fn main() {
+        }
+    """)
+
+    fun `test borrowck move from array`() = checkByText("""
+        struct S { data: i32 }
+
+        fn main() {
+            let arr: [S; 1] = [S {data: 1}];
+            let x = <error descr="Cannot move">arr[0]</error>;
+        }
+    """)
+
+    fun `test borrowck borrow`() = checkByText("""
+        struct S { data: i32 }
+
+        fn main() {
+            let mut x: S = S { data: 42 };
+            let y = &mut x;
+            x;
+        }
+    """)
 }

@@ -8,7 +8,6 @@ package org.rust.ide.inspections
 import com.intellij.codeInspection.ProblemsHolder
 import org.rust.lang.core.psi.*
 import org.rust.lang.core.psi.ext.RsInferenceContextOwner
-import org.rust.lang.core.types.borrowck.borrowck
 import org.rust.lang.core.types.inference
 import org.rust.lang.utils.addToHolder
 
@@ -24,7 +23,6 @@ abstract class RsDiagnosticBasedInspection : RsLocalInspectionTool() {
         for (it in element.inference.diagnostics) {
             if (it.inspectionClass == javaClass) it.addToHolder(holder)
         }
-        (element as? RsFunction)?.let { borrowck(it) }
     }
 }
 

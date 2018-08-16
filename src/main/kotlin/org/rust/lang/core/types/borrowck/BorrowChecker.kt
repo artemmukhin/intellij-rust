@@ -15,6 +15,7 @@ import org.rust.lang.core.resolve.ImplLookup
 import org.rust.lang.core.types.borrowck.LoanPathElement.Deref
 import org.rust.lang.core.types.borrowck.LoanPathElement.Interior
 import org.rust.lang.core.types.borrowck.LoanPathKind.*
+import org.rust.lang.core.types.borrowck.gatherLoans.MoveError
 import org.rust.lang.core.types.borrowck.gatherLoans.gatherLoansInFn
 import org.rust.lang.core.types.infer.*
 import org.rust.lang.core.types.infer.outlives.FreeRegionMap
@@ -73,6 +74,14 @@ data class LoanPath(val kind: LoanPathKind, val ty: Ty) {
             else -> false
         }
     }
+
+    val containingExpr: RsExpr?
+        get() = when (kind) {
+            is LoanPathKind.Var -> kind.original?.ancestorOrSelf<RsExpr>()
+            is LoanPathKind.Upvar -> null
+            is LoanPathKind.Downcast -> kind.element.ancestorOrSelf<RsExpr>()
+            is LoanPathKind.Extend -> (kind.loanPath.kind as? LoanPathKind.Var)?.original?.parent?.ancestorOrSelf<RsExpr>()
+        }
 
     val containingStmtText: String?
         get() = when (kind) {
@@ -165,14 +174,22 @@ sealed class LoanPathElement {
     data class Interior(val element: RsElement?, val kind: InteriorKind) : LoanPathElement()
 }
 
-class BorrowCheckResult(val usedMutNodes: MutableSet<RsElement>)
+class BorrowCheckResult(
+    val usedMutNodes: MutableSet<RsElement>,
+    val usesOfMovedValue: List<UseOfMovedValueError>,
+    val moveErrors: MutableList<MoveError>
+)
+
+class UseOfMovedValueError(val use: RsElement?, val move: RsElement?)
 
 class BorrowCheckContext(
     val regionScopeTree: ScopeTree,
     val owner: RsElement,
     val body: RsBlock,
     val implLookup: ImplLookup = ImplLookup.relativeTo(body),
-    val usedMutNodes: MutableSet<RsElement> = mutableSetOf()
+    val usedMutNodes: MutableSet<RsElement> = mutableSetOf(),
+    val usesOfMovedValue: MutableList<UseOfMovedValueError> = mutableListOf(),
+    val moveErrors: MutableList<MoveError> = mutableListOf()
 ) {
     fun isSubregionOf(sub: Region, sup: Region): Boolean {
         val freeRegions = FreeRegionMap() // TODO
@@ -191,10 +208,13 @@ class BorrowCheckContext(
     }
 
     fun reportUseOfMovedValue(useKind: MovedValueUseKind, loanPath: LoanPath, move: Move, movedLp: LoanPath) {
+        /*
         println("###reportUseOfMovedValue###")
         println("Use of moved value: ${loanPath.containingStmtText}")
         println("Move happened at: ${move.element.ancestorOrSelf<RsStmt>()?.text}")
         println()
+        */
+        usesOfMovedValue.add(UseOfMovedValueError(loanPath.containingExpr, move.element.ancestorOrSelf<RsStmt>()))
     }
 
     fun reportReassignedImmutableVariable(loanPath: LoanPath, assignment: Assignment) {
@@ -205,15 +225,15 @@ class BorrowCheckContext(
 
 fun borrowck(owner: RsElement): BorrowCheckResult? {
     val body = owner.bodyOwnedBy ?: return null
-    val regoionScopeTree = getRegionScopeTree(owner as RsItemElement)
-    val bccx = BorrowCheckContext(regoionScopeTree, owner, body)
+    val regionScopeTree = getRegionScopeTree(owner as RsItemElement)
+    val bccx = BorrowCheckContext(regionScopeTree, owner, body)
 
     val data = buildBorrowckDataflowData(bccx, false, body)
     if (data != null) {
         checkLoans(bccx, data.loans, data.moveData, data.allLoans, body)
         // TODO: implement and call `unusedCheck(borrowCheckContext, body)`
     }
-    return BorrowCheckResult(bccx.usedMutNodes)
+    return BorrowCheckResult(bccx.usedMutNodes, bccx.usesOfMovedValue, bccx.moveErrors)
 }
 
 fun buildBorrowckDataflowData(bccx: BorrowCheckContext, forceAnalysis: Boolean, body: RsBlock): AnalysisData? {
