@@ -134,11 +134,7 @@ enum class MutabilityCategory {
             Declared, Inherited -> Inherited
         }
 
-    val isMutable: Boolean
-        get() = when (this) {
-            Immutable -> false
-            Declared, Inherited -> true
-        }
+    val isMutable: Boolean get() = this != Immutable
 }
 
 /**
