@@ -135,18 +135,23 @@ class MoveData(
     fun movePathOf(loanPath: LoanPath): MovePath {
         pathMap[loanPath]?.let { return it }
 
-        val oldSize = paths.size
         val kind = loanPath.kind
-        when (kind) {
-            is Var, is Upvar -> paths.add(MovePath(loanPath))
+        val oldSize = when (kind) {
+            is Var, is Upvar -> {
+                val index = paths.size
+                paths.add(MovePath(loanPath))
+                index
+            }
 
             is Downcast, is Extend -> {
                 val base = (kind as? Downcast)?.loanPath ?: (kind as? Extend)?.loanPath!!
                 val parentPath = movePathOf(base)
+                val index = paths.size
 
                 val newMovePath = MovePath(loanPath, parentPath, null, null, parentPath.firstChild)
                 parentPath.firstChild = newMovePath
                 paths.add(newMovePath)
+                index
             }
         }
 

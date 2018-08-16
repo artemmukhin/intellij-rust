@@ -375,7 +375,7 @@ class MemoryCategorizationContext(
         }
 
     fun isTypeMovesByDefault(ty: Ty): Boolean =
-        infcx?.lookup?.isCopy(ty)?.not() ?: true
+        if (ty is TyReference) false else infcx?.lookup?.isCopy(ty)?.not() ?: false
 }
 
 

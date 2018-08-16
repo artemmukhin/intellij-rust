@@ -52,7 +52,14 @@ class GuaranteeLifetimeContext(
             is Rvalue -> category.region
             is StaticItem -> ReStatic
             is Upvar -> ReScope(itemScope)
-            is Local -> ReScope(bccx.regionScopeTree.getVariableScope(category.element.localElement as RsPatBinding)!!)
+            is Local -> {
+                val variable = category.element.localElement
+                if (variable is RsPatBinding) {
+                    ReScope(bccx.regionScopeTree.getVariableScope(variable) ?: Scope.Node(variable))
+                } else {
+                    ReScope(Scope.Node(variable))
+                }
+            }
             is Deref -> {
                 val pointerKind = category.pointerKind
                 when (pointerKind) {
