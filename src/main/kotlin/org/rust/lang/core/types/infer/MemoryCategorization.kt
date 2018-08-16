@@ -10,6 +10,7 @@ import org.rust.lang.core.psi.*
 import org.rust.lang.core.psi.ext.*
 import org.rust.lang.core.resolve.ImplLookup
 import org.rust.lang.core.resolve.StdKnownItems
+import org.rust.lang.core.types.borrowck.localElement
 import org.rust.lang.core.types.builtinDeref
 import org.rust.lang.core.types.infer.Aliasability.FreelyAliasable
 import org.rust.lang.core.types.infer.Aliasability.NonAliasable
@@ -18,7 +19,7 @@ import org.rust.lang.core.types.infer.BorrowKind.ImmutableBorrow
 import org.rust.lang.core.types.infer.BorrowKind.MutableBorrow
 import org.rust.lang.core.types.infer.Categorization.*
 import org.rust.lang.core.types.infer.ImmutabilityBlame.*
-import org.rust.lang.core.types.infer.InteriorKind.*
+import org.rust.lang.core.types.infer.InteriorKind.InteriorField
 import org.rust.lang.core.types.infer.MutabilityCategory.Declared
 import org.rust.lang.core.types.infer.PointerKind.BorrowedPointer
 import org.rust.lang.core.types.infer.PointerKind.UnsafePointer
@@ -41,7 +42,7 @@ sealed class Categorization {
     object StaticItem : Categorization()
 
     /** Variable captured by closure */
-    class Upvar : Categorization()
+    object Upvar : Categorization()
 
     /** Local variable */
     data class Local(val element: RsElement) : Categorization()
@@ -66,6 +67,9 @@ sealed class BorrowKind {
                 Mutability.IMMUTABLE -> ImmutableBorrow
                 Mutability.MUTABLE -> MutableBorrow
             }
+
+        fun isCompatible(firstKind: BorrowKind, secondKind: BorrowKind): Boolean =
+            firstKind == ImmutableBorrow && secondKind == ImmutableBorrow
     }
 }
 
@@ -145,7 +149,6 @@ enum class MutabilityCategory {
  * is the address of the place.  If Expr is an rvalue, this is the address of
  * some temporary spot in memory where the result is stored.
  *
- * [element]: Expr
  * [category]: kind of Expr
  * [mutabilityCategory]: mutability of Address(Expr)
  * [ty]: the type of data found at Address(Expr)
@@ -159,7 +162,6 @@ class Cmt(
     val immutabilityBlame: ImmutabilityBlame? =
         when (category) {
             is Deref -> {
-                // try to figure out where the immutable reference came from
                 val pointerKind = category.pointerKind
                 val baseCmt = category.cmt
                 if (pointerKind is BorrowedPointer && pointerKind.borrowKind is ImmutableBorrow) {
@@ -218,7 +220,7 @@ class MemoryCategorizationContext(val infcx: RsInferenceContext) {
             else -> processExprUnadjusted(expr)
         }
 
-    private fun processExprUnadjusted(expr: RsExpr): Cmt =
+    fun processExprUnadjusted(expr: RsExpr): Cmt =
         when (expr) {
             is RsUnaryExpr -> processUnaryExpr(expr)
             is RsDotExpr -> processDotExpr(expr)
@@ -235,7 +237,7 @@ class MemoryCategorizationContext(val infcx: RsInferenceContext) {
         return processDeref(unaryExpr, baseCmt)
     }
 
-    private fun processDotExpr(dotExpr: RsDotExpr): Cmt {
+    fun processDotExpr(dotExpr: RsDotExpr): Cmt {
         if (dotExpr.methodCall != null) {
             return processRvalue(dotExpr)
         }
@@ -246,14 +248,14 @@ class MemoryCategorizationContext(val infcx: RsInferenceContext) {
         return cmtOfField(dotExpr, baseCmt, fieldName, type)
     }
 
-    private fun processIndexExpr(indexExpr: RsIndexExpr): Cmt {
+    fun processIndexExpr(indexExpr: RsIndexExpr): Cmt {
         val type = indexExpr.type
         val base = indexExpr.containerExpr ?: return Cmt(indexExpr, ty = type)
         val baseCmt = processExpr(base)
-        return Cmt(indexExpr, Interior(baseCmt, InteriorIndex), baseCmt.mutabilityCategory.inherit(), type)
+        return Cmt(indexExpr, Interior(baseCmt, InteriorKind.InteriorIndex), baseCmt.mutabilityCategory.inherit(), type)
     }
 
-    private fun processPathExpr(pathExpr: RsPathExpr): Cmt {
+    fun processPathExpr(pathExpr: RsPathExpr): Cmt {
         val type = pathExpr.type
         val declaration = pathExpr.path.reference.resolve() ?: return Cmt(pathExpr, ty = type)
         return when (declaration) {
@@ -275,7 +277,7 @@ class MemoryCategorizationContext(val infcx: RsInferenceContext) {
         }
     }
 
-    private fun processParenExpr(parenExpr: RsParenExpr): Cmt =
+    fun processParenExpr(parenExpr: RsParenExpr): Cmt =
         processExpr(parenExpr.expr)
 
 
@@ -296,6 +298,9 @@ class MemoryCategorizationContext(val infcx: RsInferenceContext) {
     // so now all rvalues have static region
     fun processRvalue(expr: RsExpr): Cmt =
         Cmt(expr, Rvalue(ReStatic), Declared, expr.type)
+
+    fun processRvalue(element: RsElement, tempScope: Region, ty: Ty): Cmt =
+        Cmt(element, Rvalue(tempScope), Declared, ty)
 
     fun walkPat(cmt: Cmt, pat: RsPat, callback: (Cmt, RsPat) -> Unit) {
         fun processTuplePats(pats: List<RsPat>) {
@@ -333,6 +338,13 @@ class MemoryCategorizationContext(val infcx: RsInferenceContext) {
         }
     }
 
+    // TODO
+    fun processDef(element: RsElement, exprType: Ty): Cmt? {
+        val def = element.localElement
+        val mutbl = ((def as? RsPatBinding)?.kind as? RsBindingModeKind.BindByValue)?.mutability?.isMut ?: false
+        return Cmt(element, Local(def), if (mutbl) Declared else MutabilityCategory.Immutable, exprType)
+    }
+
     private fun cmtOfField(element: RsElement, baseCmt: Cmt, fieldName: String?, fieldType: Ty): Cmt =
         Cmt(
             element,
@@ -344,7 +356,7 @@ class MemoryCategorizationContext(val infcx: RsInferenceContext) {
     private fun cmtOfSliceElement(element: RsElement, baseCmt: Cmt): Cmt =
         Cmt(
             element,
-            Interior(baseCmt, InteriorPattern),
+            Interior(baseCmt, InteriorKind.InteriorPattern),
             baseCmt.mutabilityCategory.inherit(),
             baseCmt.ty
         )

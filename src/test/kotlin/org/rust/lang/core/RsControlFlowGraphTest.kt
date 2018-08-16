@@ -8,6 +8,7 @@ package org.rust.lang.core
 import junit.framework.ComparisonFailure
 import org.intellij.lang.annotations.Language
 import org.rust.lang.RsTestBase
+import org.rust.lang.core.cfg.ControlFlowGraph
 import org.rust.lang.core.psi.RsBlock
 import org.rust.lang.core.psi.ext.descendantsOfType
 
@@ -16,7 +17,7 @@ class RsControlFlowGraphTest : RsTestBase() {
     protected fun testCFG(@Language("Rust") code: String, expectedIndented: String) {
         InlineFile(code)
         val block = myFixture.file.descendantsOfType<RsBlock>().firstOrNull() ?: return
-        val cfg = ControlFlowGraph(block)
+        val cfg = ControlFlowGraph.buildFor(block)
         val expected = expectedIndented.trimIndent()
         val actual = cfg.depthFirstTraversalTrace()
         check(actual == expected) { throw ComparisonFailure("Comparision failed", expected, actual) }

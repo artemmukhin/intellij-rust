@@ -6,6 +6,7 @@
 package org.rust.lang.core
 
 import org.rust.lang.RsTestBase
+import org.rust.lang.utils.Graph
 
 class RsGraphTest : RsTestBase() {
     private fun checkGraphTraversal(actual: String, expected: String) {

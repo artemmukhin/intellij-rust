@@ -9,6 +9,7 @@ import com.intellij.codeInspection.ProblemsHolder
 import org.rust.ide.annotator.fixes.AddMutableFix
 import org.rust.lang.core.psi.*
 import org.rust.lang.core.psi.ext.*
+import org.rust.lang.core.types.borrowck.borrowck
 import org.rust.lang.core.types.isMutable
 import org.rust.lang.core.types.ty.TyReference
 import org.rust.lang.core.types.type
@@ -31,11 +32,30 @@ class RsBorrowCheckerInspection : RsLocalInspectionTool() {
                     registerProblem(holder, expr, expr)
                 }
             }
+
+            override fun visitFunction(func: RsFunction) {
+                val borrowCheckResult = borrowck(func) ?: return
+                borrowCheckResult.usesOfMovedValue.forEach {
+                    if (it.use != null) registerUseOfMovedValueProblem(holder, it.use)
+                }
+                borrowCheckResult.moveErrors.forEach {
+                    val move = it.from.element.ancestorOrSelf<RsExpr>()
+                    if (move != null) registerMoveProblem(holder, move)
+                }
+            }
         }
 
     private fun registerProblem(holder: ProblemsHolder, expr: RsExpr, nameExpr: RsExpr) {
         val fix = AddMutableFix.createIfCompatible(nameExpr).let { if (it == null) emptyArray() else arrayOf(it) }
         holder.registerProblem(expr, "Cannot borrow immutable local variable `${nameExpr.text}` as mutable", *fix)
+    }
+
+    private fun registerUseOfMovedValueProblem(holder: ProblemsHolder, element: RsElement) {
+        holder.registerProblem(element, "Use of moved value")
+    }
+
+    private fun registerMoveProblem(holder: ProblemsHolder, element: RsElement) {
+        holder.registerProblem(element, "Cannot move")
     }
 
     private fun checkMethodRequiresMutable(receiver: RsExpr, fn: RsFunction): Boolean {

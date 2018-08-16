@@ -5,6 +5,9 @@
 
 package org.rust.lang.core
 
+import org.rust.lang.core.cfg.CFGEdge
+import org.rust.lang.core.cfg.CFGNode
+import org.rust.lang.core.cfg.ControlFlowGraph
 import org.rust.lang.core.psi.RsBlock
 import org.rust.lang.core.psi.ext.RsElement
 import java.util.*
