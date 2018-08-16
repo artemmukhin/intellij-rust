@@ -22,6 +22,7 @@ class MoveErrorCollector(private val errors: MutableList<MoveError> = mutableLis
         errors.forEach { error ->
             println("###MoveError###")
             println("${error.from.element.ancestorOrSelf<RsStmt>()?.text}")
+            println()
         }
     }
 }

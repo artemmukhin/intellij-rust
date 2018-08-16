@@ -41,7 +41,12 @@ class RestrictionContext(val bccx: BorrowCheckContext, val loanRegion: Region, v
 
             is Categorization.Upvar -> SafeIf(loanPath(Upvar()), mutableListOf(loanPath(Upvar())))
 
-            is Categorization.Local -> SafeIf(loanPath(Var(category.element)), mutableListOf(loanPath(Var(category.element))))
+            is Categorization.Local -> {
+                val original = category.element
+                val local = original.localElement
+                val variable = Var(local, original)
+                SafeIf(loanPath(variable), mutableListOf(loanPath(variable)))
+            }
 
             is Categorization.Deref -> {
                 val baseCmt = category.cmt

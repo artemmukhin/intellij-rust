@@ -145,13 +145,13 @@ sealed class LoanPathKind {
 
             other as Var
 
-            if (element.localElement != other.element.localElement) return false
+            if (element != other.element) return false
 
             return true
         }
 
         override fun hashCode(): Int {
-            return element.localElement.hashCode()
+            return element.hashCode()
         }
     }
 

@@ -47,7 +47,7 @@ class GatherMoveContext(val bccx: BorrowCheckContext, val moveErrorCollector: Mo
     }
 
     fun gatherDeclaration(moveData: MoveData, variable: RsElement, variableType: Ty) {
-        val loanPath = LoanPath(LoanPathKind.Var(variable), variableType)
+        val loanPath = LoanPath(LoanPathKind.Var(variable.localElement, variable), variableType)
         moveData.addMove(loanPath, variable, MoveKind.Declared)
     }
 
@@ -121,4 +121,4 @@ class GatherMoveContext(val bccx: BorrowCheckContext, val moveErrorCollector: Mo
 }
 
 // TODO: use ImplLookup
-val RsStructOrEnumItemElement.hasDestructor: Boolean get() = true
+val RsStructOrEnumItemElement.hasDestructor: Boolean get() = false

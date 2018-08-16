@@ -176,6 +176,19 @@ class RsTypeCheckInspectionTest : RsInspectionsTestBase(RsTypeCheckInspection())
             x;
         }
     """)
+    /*
+    ###reportUseOfMovedValue###
+    Use of moved value: x.data
+    Move happened at: f(x);
+
+    ###reportUseOfMovedValue###
+    Use of moved value: f(x);
+    Move happened at: f(x);
+
+    ###reportUseOfMovedValue###
+    Use of moved value: x;
+    Move happened at: f(x);
+    */
 
     fun `test borrowck move by assign`() = checkByText("""
         fn main() {
@@ -184,6 +197,11 @@ class RsTypeCheckInspectionTest : RsInspectionsTestBase(RsTypeCheckInspection())
             x;
         }
     """)
+    /*
+    ###reportUseOfMovedValue###
+    Use of moved value: x;
+    Move happened at: let y = x;
+    */
 
     fun `test borrowck move by assign 2`() = checkByText("""
         fn main() {
@@ -193,6 +211,11 @@ class RsTypeCheckInspectionTest : RsInspectionsTestBase(RsTypeCheckInspection())
             x;
         }
     """)
+    /*
+    ###reportUseOfMovedValue###
+    Use of moved value: x;
+    Move happened at: y = x;
+    */
 
     fun `test borrowck move from raw pointer`() = checkByText("""
         struct S { data: i32 }
@@ -205,6 +228,10 @@ class RsTypeCheckInspectionTest : RsInspectionsTestBase(RsTypeCheckInspection())
         fn main() {
         }
     """)
+    /*
+    ###MoveError###
+    y = *x;
+    */
 
     fun `test borrowck move from array`() = checkByText("""
         struct S { data: i32 }
@@ -214,4 +241,8 @@ class RsTypeCheckInspectionTest : RsInspectionsTestBase(RsTypeCheckInspection())
             let x = arr[0];
         }
     """)
+    /*
+    ###MoveError###
+    let x = arr[0];
+     */
 }
