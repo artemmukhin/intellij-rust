@@ -18,8 +18,7 @@ import org.rust.lang.core.types.infer.BorrowKind.ImmutableBorrow
 import org.rust.lang.core.types.infer.BorrowKind.MutableBorrow
 import org.rust.lang.core.types.infer.Categorization.*
 import org.rust.lang.core.types.infer.ImmutabilityBlame.*
-import org.rust.lang.core.types.infer.InteriorKind.InteriorElement
-import org.rust.lang.core.types.infer.InteriorKind.InteriorField
+import org.rust.lang.core.types.infer.InteriorKind.*
 import org.rust.lang.core.types.infer.MutabilityCategory.Declared
 import org.rust.lang.core.types.infer.PointerKind.BorrowedPointer
 import org.rust.lang.core.types.infer.PointerKind.UnsafePointer
@@ -76,8 +75,9 @@ sealed class PointerKind {
 }
 
 sealed class InteriorKind {
-    class InteriorField(val fieldName: String?) : InteriorKind()
-    object InteriorElement : InteriorKind()
+    class InteriorField(val fieldName: String?) : InteriorKind()    // e.g. `s.field`
+    object InteriorIndex : InteriorKind()                           // e.g. `arr[0]`
+    object InteriorPattern : InteriorKind()                         // e.g. `fn foo([_, a, _, _]: [A; 4]) { ... }`
 }
 
 sealed class ImmutabilityBlame {
@@ -254,7 +254,7 @@ class MemoryCategorizationContext(val infcx: RsInferenceContext) {
         val type = indexExpr.type
         val base = indexExpr.containerExpr ?: return Cmt(indexExpr, ty = type)
         val baseCmt = processExpr(base)
-        return Cmt(indexExpr, Interior(baseCmt, InteriorElement), baseCmt.mutabilityCategory.inherit(), type)
+        return Cmt(indexExpr, Interior(baseCmt, InteriorIndex), baseCmt.mutabilityCategory.inherit(), type)
     }
 
     private fun processPathExpr(pathExpr: RsPathExpr): Cmt {
@@ -348,7 +348,7 @@ class MemoryCategorizationContext(val infcx: RsInferenceContext) {
     private fun cmtOfSliceElement(element: RsElement, baseCmt: Cmt): Cmt =
         Cmt(
             element,
-            Interior(baseCmt, InteriorElement),
+            Interior(baseCmt, InteriorPattern),
             baseCmt.mutabilityCategory.inherit(),
             baseCmt.ty
         )
