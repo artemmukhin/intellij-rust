@@ -92,7 +92,7 @@ val RsInferenceContextOwner.memoryCategorization: RsMemoryCategorizationResult
         }
     }
 
-val PsiElement.memoryCategorization: RsMemoryCategorizationResult?
+private val PsiElement.memoryCategorization: RsMemoryCategorizationResult?
     get() = contextOrSelf<RsInferenceContextOwner>()?.memoryCategorization
 
 val RsExpr.cmt: Cmt?
