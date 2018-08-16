@@ -350,7 +350,10 @@ class MemoryCategorizationContext(val infcx: RsInferenceContext) {
         )
 
     fun isTypeMovesByDefault(ty: Ty): Boolean =
-        infcx.lookup.isCopy(ty).not()
+        when (ty) {
+            is TyReference, is TyPointer -> false
+            else -> infcx.lookup.isCopy(ty).not()
+        }
 }
 
 typealias RsMemoryCategorizationResult = MutableMap<RsExpr, Cmt>
