@@ -409,6 +409,19 @@ class RsBorrowCheckerInspectionTest : RsInspectionsTestBase(RsBorrowCheckerInspe
         }
     """)
 
+    fun `test borrowck let in while`() = checkByText("""
+        struct S { a: i32 }
+
+        fn main() {
+            let mut nodes: Vec<S> = vec![];
+            while let Some(node) = nodes.pop() {
+                release_node(node);
+            }
+        }
+
+        fn release_node(node: S) {}
+    """)
+
     fun `test borrowck borrow`() = checkByText("""
         struct S { data: i32 }
 

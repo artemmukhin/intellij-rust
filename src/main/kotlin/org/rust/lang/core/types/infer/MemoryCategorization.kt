@@ -363,6 +363,7 @@ class MemoryCategorizationContext(val infcx: RsInferenceContext) {
 
     fun isTypeMovesByDefault(ty: Ty): Boolean =
         when (ty) {
+            is TyUnknown -> false
             is TyReference, is TyPointer -> false
             else -> infcx.lookup.isCopy(ty).not()
         }
