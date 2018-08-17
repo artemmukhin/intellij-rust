@@ -198,7 +198,7 @@ class BorrowCheckContext(
     val usesOfMovedValue: MutableList<UseOfMovedValueError> = mutableListOf(),
     val moveErrors: MutableList<MoveError> = mutableListOf()
 ) {
-    fun isSubregionOf(sub: Region, sup: Region): Boolean {
+    fun isSubRegionOf(sub: Region, sup: Region): Boolean {
         val freeRegions = FreeRegionMap() // TODO
         val regionRelations = RegionRelations(owner, regionScopeTree, freeRegions)
         return regionRelations.isSubRegionOf(sub, sup)

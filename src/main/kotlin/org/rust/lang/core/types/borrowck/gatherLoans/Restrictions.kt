@@ -53,7 +53,7 @@ class RestrictionContext(val bccx: BorrowCheckContext, val loanRegion: Region, v
                 val pointerKind = category.pointerKind
                 when (pointerKind) {
                     is PointerKind.BorrowedPointer -> {
-                        if (!bccx.isSubregionOf(loanRegion, pointerKind.region)) {
+                        if (!bccx.isSubRegionOf(loanRegion, pointerKind.region)) {
                             val errorCode = BorrowedPointerTooShort(loanRegion, pointerKind.region)
                             bccx.report(BorrowCheckError(BorrowViolation(cause), baseCmt, errorCode))
                             return Safe

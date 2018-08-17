@@ -35,7 +35,7 @@ class GuaranteeLifetimeContext(
         }
 
     private fun checkScope(maxScope: Region): Boolean {
-        if (!bccx.isSubregionOf(loanRegion, maxScope)) {
+        if (!bccx.isSubRegionOf(loanRegion, maxScope)) {
             reportError(BorrowCheckErrorCode.OutOfScope(maxScope, loanRegion, cause))
             return false
         }
