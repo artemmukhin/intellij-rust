@@ -205,13 +205,19 @@ class BorrowCheckContext(
     }
 
     fun report(error: BorrowCheckError) {
-        print("###report: ")
-        println(error)
+        println("###report: ")
+        when (error.code) {
+            is BorrowCheckErrorCode.Mutability -> println("Cannot borrow immutable as mutable")
+            is BorrowCheckErrorCode.OutOfScope -> println("Out of scope")
+            is BorrowCheckErrorCode.BorrowedPointerTooShort -> println("Borrowed pointer too short")
+        }
+        println()
     }
 
     fun reportAliasabilityViolation(cause: AliasableViolationKind, reason: AliasableReason, cmt: Cmt) {
         print("###reportAliasabilityViolation: ")
         println(cause)
+        println()
     }
 
     fun reportUseOfMovedValue(useKind: MovedValueUseKind, loanPath: LoanPath, move: Move, movedLp: LoanPath) {
