@@ -171,7 +171,7 @@ class CFGBuilder(val graph: Graph<CFGNodeData, CFGEdgeData>, val entry: CFGNode,
         //     v 4   v 5          v 3   v 4
         //     [ifExpr]          [ifExpr]
         //
-        val conditionExit = process(ifExpr.condition?.expr, pred)
+        val conditionExit = process(ifExpr.condition, pred)
         val thenExit = process(ifExpr.block, conditionExit)
         val elseBranch = ifExpr.elseBranch
 
@@ -203,7 +203,7 @@ class CFGBuilder(val graph: Graph<CFGNodeData, CFGEdgeData>, val entry: CFGNode,
         val loopScope = LoopScope(whileExpr, loopBack, exprExit)
 
         withLoopScope(loopScope) {
-            val conditionExit = process(whileExpr.condition?.expr, loopBack)
+            val conditionExit = process(whileExpr.condition, loopBack)
             addContainedEdge(conditionExit, exprExit)
 
             val bodyExit = process(whileExpr.block, conditionExit)
@@ -235,6 +235,12 @@ class CFGBuilder(val graph: Graph<CFGNodeData, CFGEdgeData>, val entry: CFGNode,
         }
 
         finishWith(exprExit)
+    }
+
+    override fun visitCondition(condition: RsCondition) {
+        val patExit = process(condition.pat, pred)
+        val initExit = process(condition.expr, patExit)
+        finishWith { addAstNode(condition, patExit, initExit) }
     }
 
     override fun visitForExpr(forExpr: RsForExpr) {

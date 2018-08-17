@@ -230,7 +230,9 @@ class ExprUseWalker(
             }
 
             is RsIfExpr -> {
-                expr.condition?.expr?.let { consumeExpr(it) }
+                // TODO: is it right?
+                // expr.condition?.expr?.let { consumeExpr(it) }
+                expr.condition?.let { walkCondition(it) }
                 expr.block?.let { walkBlock(it) }
                 expr.elseBranch?.block?.let { walkBlock(it) } // TODO: is it right, or maybe consume else branch?
             }
@@ -253,7 +255,9 @@ class ExprUseWalker(
             is RsLoopExpr -> expr.block?.let { walkBlock(it) }
 
             is RsWhileExpr -> {
-                expr.condition?.expr?.let { consumeExpr(it) }
+                // TODO: is it right?
+                // expr.condition?.expr?.let { consumeExpr(it) }
+                expr.condition?.let { walkCondition(it) }
                 expr.block?.let { walkBlock(it) }
             }
 
@@ -302,6 +306,14 @@ class ExprUseWalker(
         } else {
             pat.descendantsOfType<RsPatBinding>().forEach { delegate.declarationWithoutInit(it) }
         }
+    }
+
+    fun walkCondition(condition: RsCondition) {
+        val init = condition.expr
+        val pat = condition.pat ?: return
+        walkExpr(init)
+        val initCmt = mc.processExpr(init)
+        walkIrrefutablePat(initCmt, pat)
     }
 
     private fun walkBlock(block: RsBlock) {
