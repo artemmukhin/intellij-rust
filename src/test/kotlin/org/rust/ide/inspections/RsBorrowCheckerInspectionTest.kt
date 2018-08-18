@@ -422,6 +422,21 @@ class RsBorrowCheckerInspectionTest : RsInspectionsTestBase(RsBorrowCheckerInspe
         fn f(node: S) {}
     """)
 
+    fun `test borrowck self`() = checkByText("""
+        enum Kind { A }
+        pub struct DeadlineError(Kind);
+
+        impl DeadlineError {
+            fn f(&self) {
+                use self::Kind::*;
+                match self.0 {
+                    // A => {}    <-- error! Why?
+                    A => {}
+                };
+            }
+        }
+    """)
+
     fun `test borrowck borrow`() = checkByText("""
         struct S { data: i32 }
 

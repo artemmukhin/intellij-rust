@@ -310,10 +310,9 @@ class ExprUseWalker(
 
     fun walkCondition(condition: RsCondition) {
         val init = condition.expr
-        val pat = condition.pat ?: return
-        walkExpr(init)
+        consumeExpr(init)
         val initCmt = mc.processExpr(init)
-        walkIrrefutablePat(initCmt, pat)
+        condition.pat?.let { walkIrrefutablePat(initCmt, it) }
     }
 
     private fun walkBlock(block: RsBlock) {
@@ -369,6 +368,7 @@ class ExprUseWalker(
     }
 
     /** Identifies any bindings within [pat] whether the overall pattern/match structure is a move, copy, or borrow */
+    // TODO: false positive
     private fun determinePatMoveMode(discriminantCmt: Cmt, pat: RsPat, mode: TrackMatchMode): TrackMatchMode {
         var newMode = mode
         mc.walkPat(discriminantCmt, pat) { patCmt, pat ->
