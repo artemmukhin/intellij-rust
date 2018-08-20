@@ -310,7 +310,7 @@ class ExprUseWalker(
 
     fun walkCondition(condition: RsCondition) {
         val init = condition.expr
-        consumeExpr(init)
+        walkExpr(init)
         val initCmt = mc.processExpr(init)
         condition.pat?.let { walkIrrefutablePat(initCmt, it) }
     }
