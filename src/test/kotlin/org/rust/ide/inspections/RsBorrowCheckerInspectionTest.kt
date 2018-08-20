@@ -452,7 +452,7 @@ class RsBorrowCheckerInspectionTest : RsInspectionsTestBase(RsBorrowCheckerInspe
             let x = S { data: 42 };
             let y = S { data: 1 };
             if x == y {
-                x;
+                <error descr="Use of moved value">x</error>; // TODO
             }
         }
     """)
