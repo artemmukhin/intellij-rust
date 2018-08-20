@@ -409,6 +409,7 @@ class RsBorrowCheckerInspectionTest : RsInspectionsTestBase(RsBorrowCheckerInspe
         }
     """)
 
+    // TODO: reassign
     fun `test borrowck let in while`() = checkByText("""
         struct S { a: i32 }
 
@@ -457,6 +458,7 @@ class RsBorrowCheckerInspectionTest : RsInspectionsTestBase(RsBorrowCheckerInspe
         }
     """)
 
+    // TODO
     fun `test borrowck borrow`() = checkByText("""
         struct S { data: i32 }
 
@@ -464,6 +466,19 @@ class RsBorrowCheckerInspectionTest : RsInspectionsTestBase(RsBorrowCheckerInspe
             let mut x: S = S { data: 42 };
             let y = &mut x;
             x;
+        }
+    """)
+
+    // TODO
+    fun `test borrowck borrow vec`() = checkByText("""
+        struct S { data: i32 }
+
+        fn main() {
+            let mut vec = Vec::new();
+            vec.push(S { data: 1});
+            let x = &vec[0];
+            vec.clear();
+            let y = x.data;
         }
     """)
 }

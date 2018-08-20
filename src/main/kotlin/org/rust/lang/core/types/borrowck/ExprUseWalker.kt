@@ -230,8 +230,6 @@ class ExprUseWalker(
             }
 
             is RsIfExpr -> {
-                // TODO: is it right?
-                // expr.condition?.expr?.let { consumeExpr(it) }
                 expr.condition?.let { walkCondition(it) }
                 expr.block?.let { walkBlock(it) }
                 expr.elseBranch?.block?.let { walkBlock(it) } // TODO: is it right, or maybe consume else branch?
@@ -255,8 +253,6 @@ class ExprUseWalker(
             is RsLoopExpr -> expr.block?.let { walkBlock(it) }
 
             is RsWhileExpr -> {
-                // TODO: is it right?
-                // expr.condition?.expr?.let { consumeExpr(it) }
                 expr.condition?.let { walkCondition(it) }
                 expr.block?.let { walkBlock(it) }
             }
@@ -368,7 +364,6 @@ class ExprUseWalker(
     }
 
     /** Identifies any bindings within [pat] whether the overall pattern/match structure is a move, copy, or borrow */
-    // TODO: false positive
     private fun determinePatMoveMode(discriminantCmt: Cmt, pat: RsPat, mode: TrackMatchMode): TrackMatchMode {
         var newMode = mode
         mc.walkPat(discriminantCmt, pat) { patCmt, pat ->

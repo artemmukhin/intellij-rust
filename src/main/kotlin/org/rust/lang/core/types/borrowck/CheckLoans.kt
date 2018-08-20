@@ -11,9 +11,11 @@ import org.rust.lang.core.psi.ext.RsElement
 import org.rust.lang.core.types.borrowck.LoanPathKind.*
 import org.rust.lang.core.types.borrowck.MovedValueUseKind.MovedInCapture
 import org.rust.lang.core.types.borrowck.MovedValueUseKind.MovedInUse
+import org.rust.lang.core.types.borrowck.gatherLoans.hasDestructor
 import org.rust.lang.core.types.infer.*
 import org.rust.lang.core.types.regions.Region
 import org.rust.lang.core.types.regions.Scope
+import org.rust.lang.core.types.ty.TyAdt
 
 fun checkLoans(
     bccx: BorrowCheckContext,
@@ -152,7 +154,14 @@ class CheckLoanContext(
             if (lpElement is LoanPathElement.Interior) {
                 val lpElementKind = lpElement.kind
                 if (lpElementKind is InteriorKind.InteriorField) {
-                    // TODO
+                    if (baseLoanPath.ty is TyAdt && baseLoanPath.ty.item.hasDestructor) {
+                        moveData.eachMoveOf(element, baseLoanPath) { _, _ ->
+                            // TODO: bccx.report()
+                            false
+                        }
+                        return
+                    }
+                    checkIfAssignedPathIsMoved(element, useKind, baseLoanPath)
                 } else if (lpElementKind is InteriorKind.InteriorIndex || lpElementKind is InteriorKind.InteriorPattern) {
                     checkIfPathIsMoved(element, useKind, baseLoanPath)
                 }
@@ -182,7 +191,7 @@ class CheckLoanContext(
                 } else {
                     bccx.reportReassignedImmutableVariable(loanPath, assign)
                 }
-                false // TODO: really? maybe move it to else-branch?
+                false
             }
         }
     }
