@@ -315,7 +315,11 @@ class MemoryCategorizationContext(val infcx: RsInferenceContext) {
         callback(cmt, pat)
 
         when (pat) {
-            is RsPatIdent -> pat.pat?.let { walkPat(cmt, it, callback) }
+            is RsPatIdent -> {
+                if (pat.patBinding.reference.resolve() !is RsEnumVariant) {
+                    pat.pat?.let { walkPat(cmt, it, callback) }
+                }
+            }
 
             is RsPatTupleStruct -> processTuplePats(pat.patList)
 

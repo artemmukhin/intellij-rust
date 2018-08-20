@@ -372,7 +372,7 @@ class ExprUseWalker(
     private fun determinePatMoveMode(discriminantCmt: Cmt, pat: RsPat, mode: TrackMatchMode): TrackMatchMode {
         var newMode = mode
         mc.walkPat(discriminantCmt, pat) { patCmt, pat ->
-            if (pat is RsPatIdent) {
+            if (pat is RsPatIdent && pat.patBinding.reference.resolve() !is RsEnumVariant) {
                 newMode = when (pat.patBinding.kind) {
                     is BindByReference -> newMode.lub(MatchMode.BorrowingMatch)
                     is BindByValue -> newMode.lub(copyOrMove(mc, patCmt, PatBindingMove).matchMode)
@@ -389,7 +389,7 @@ class ExprUseWalker(
      */
     private fun walkPat(discriminantCmt: Cmt, pat: RsPat, matchMode: MatchMode) {
         mc.walkPat(discriminantCmt, pat) { patCmt, pat ->
-            if (pat is RsPatIdent) {
+            if (pat is RsPatIdent && pat.patBinding.reference.resolve() !is RsEnumVariant) {
                 val patType = pat.patBinding.type
 
                 // TODO: get definition of pat
