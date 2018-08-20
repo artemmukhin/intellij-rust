@@ -369,6 +369,7 @@ class MemoryCategorizationContext(val infcx: RsInferenceContext) {
         when (ty) {
             is TyUnknown -> false
             is TyReference, is TyPointer -> false
+            is TyFunction -> false
             else -> infcx.lookup.isCopy(ty).not()
         }
 }
