@@ -435,6 +435,14 @@ class RsBorrowCheckerInspectionTest : RsInspectionsTestBase(RsBorrowCheckerInspe
         }
     """)
 
+    fun `test borrowck closure used twice`() = checkByText("""
+        fn main() {
+            let f = |x: i32| {};
+            f(1);
+            f(2);
+        }
+    """)
+
     fun `test borrowck borrow`() = checkByText("""
         struct S { data: i32 }
 
