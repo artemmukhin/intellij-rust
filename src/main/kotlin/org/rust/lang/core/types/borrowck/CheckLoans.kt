@@ -14,7 +14,6 @@ import org.rust.lang.core.types.borrowck.MovedValueUseKind.MovedInUse
 import org.rust.lang.core.types.infer.*
 import org.rust.lang.core.types.regions.Region
 import org.rust.lang.core.types.regions.Scope
-import org.rust.openapiext.testAssert
 
 fun checkLoans(
     bccx: BorrowCheckContext,
@@ -278,7 +277,7 @@ class CheckLoanContext(
     /** Checks whether [oldLoan] and [newLoan] can safely be issued simultaneously. */
     private fun reportErrorIfLoansConflict(oldLoan: Loan, newLoan: Loan): Boolean {
         // Should only be called for loans that are in scope at the same time.
-        testAssert { bccx.regionScopeTree.intersects(oldLoan.killScope, newLoan.killScope) }
+        if (!bccx.regionScopeTree.intersects(oldLoan.killScope, newLoan.killScope)) return false
 
         val errorOldNew = reportErrorIfLoanConflictsWithRestriction(oldLoan, newLoan, oldLoan, newLoan)
         val errorNewOld = reportErrorIfLoanConflictsWithRestriction(newLoan, oldLoan, oldLoan, newLoan)

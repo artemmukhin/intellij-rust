@@ -230,6 +230,7 @@ class BorrowCheckContext(
         usesOfMovedValue.add(UseOfMovedValueError(loanPath.containingExpr, move.element.ancestorOrSelf<RsStmt>()))
     }
 
+    // TODO: false positives
     fun reportReassignedImmutableVariable(loanPath: LoanPath, assignment: Assignment) {
         print("###reportReassignedImmutableVariable: ")
         println(loanPath.kind)
