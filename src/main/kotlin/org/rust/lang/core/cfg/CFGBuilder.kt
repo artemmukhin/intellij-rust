@@ -238,9 +238,9 @@ class CFGBuilder(val graph: Graph<CFGNodeData, CFGEdgeData>, val entry: CFGNode,
     }
 
     override fun visitCondition(condition: RsCondition) {
-        val patExit = process(condition.pat, pred)
-        val initExit = process(condition.expr, patExit)
-        finishWith { addAstNode(condition, patExit, initExit) }
+        val initExit = process(condition.expr, pred)
+        val exit = process(condition.pat, initExit)
+        finishWithAstNode(condition, exit)
     }
 
     override fun visitForExpr(forExpr: RsForExpr) {
