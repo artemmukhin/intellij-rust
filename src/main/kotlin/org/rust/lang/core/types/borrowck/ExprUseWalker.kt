@@ -11,8 +11,7 @@ import org.rust.lang.core.psi.ext.RsBindingModeKind.BindByReference
 import org.rust.lang.core.psi.ext.RsBindingModeKind.BindByValue
 import org.rust.lang.core.types.borrowck.ConsumeMode.Copy
 import org.rust.lang.core.types.borrowck.ConsumeMode.Move
-import org.rust.lang.core.types.borrowck.LoanCause.AddrOf
-import org.rust.lang.core.types.borrowck.LoanCause.RefBinding
+import org.rust.lang.core.types.borrowck.LoanCause.*
 import org.rust.lang.core.types.borrowck.MatchMode.CopyingMatch
 import org.rust.lang.core.types.borrowck.MatchMode.NonBindingMatch
 import org.rust.lang.core.types.borrowck.MoveReason.DirectRefMove
@@ -346,8 +345,11 @@ class ExprUseWalker(
                 is Adjustment.Deref -> {
                     // TODO: overloaded deref support needed
                 }
-                is Adjustment.Borrow -> {
-
+                is Adjustment.BorrowReference -> {
+                    delegate.borrow(expr, cmt, adjustment.region, BorrowKind.from(adjustment.mutability), AutoRef)
+                }
+                is Adjustment.BorrowPointer -> {
+                    // TODO
                 }
             }
         }

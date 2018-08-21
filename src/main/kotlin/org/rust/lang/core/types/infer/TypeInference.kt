@@ -22,6 +22,9 @@ import org.rust.lang.core.resolve.StdKnownItems
 import org.rust.lang.core.resolve.ref.*
 import org.rust.lang.core.stubs.RsStubLiteralType
 import org.rust.lang.core.types.*
+import org.rust.lang.core.types.infer.Adjustment.BorrowReference
+import org.rust.lang.core.types.infer.Adjustment.Deref
+import org.rust.lang.core.types.regions.Region
 import org.rust.lang.core.types.ty.*
 import org.rust.lang.core.types.ty.Mutability.IMMUTABLE
 import org.rust.lang.core.types.ty.Mutability.MUTABLE
@@ -42,7 +45,8 @@ fun inferTypesIn(element: RsInferenceContextOwner): RsInferenceResult {
 
 sealed class Adjustment(val target: Ty) {
     class Deref(target: Ty) : Adjustment(target)
-    class Borrow(target: Ty, val mutability: Mutability) : Adjustment(target)
+    class BorrowReference(target: Ty, val region: Region, val mutability: Mutability) : Adjustment(target)
+    class BorrowPointer(target: Ty, val mutability: Mutability) : Adjustment(target)
 }
 
 /**
@@ -1172,7 +1176,7 @@ class RsFnInferenceContext(
             }
             return TyUnknown
         }
-        ctx.addAdjustment(fieldLookup.parentDotExpr.expr, Adjustment.Deref(receiver), field.derefCount)
+        ctx.addAdjustment(fieldLookup.parentDotExpr.expr, Deref(receiver), field.derefCount)
 
         val fieldElement = field.element
 
@@ -1295,8 +1299,10 @@ class RsFnInferenceContext(
             is BoolOp -> {
                 if (op is OverloadableBinaryOperator) {
                     val rhsType = resolveTypeVarsWithObligations(expr.right?.inferType() ?: TyUnknown)
-                    ctx.addAdjustment(expr.left, Adjustment.Borrow(lhsType, IMMUTABLE))
-                    expr.right?.let { ctx.addAdjustment(it, Adjustment.Borrow(rhsType, IMMUTABLE)) }
+                    if (lhsType is TyReference && rhsType is TyReference) {
+                        ctx.addAdjustment(expr.left, BorrowReference(lhsType, lhsType.region, IMMUTABLE))
+                        expr.right?.let { ctx.addAdjustment(it, BorrowReference(rhsType, rhsType.region, IMMUTABLE)) }
+                    }
                     run {
                         // TODO replace it via `selectOverloadedOp` and share the code with `AssignmentOp`
                         // branch when cmp ops will become a real lang items in std
@@ -1315,8 +1321,10 @@ class RsFnInferenceContext(
                 lookup.findArithmeticBinaryExprOutputType(lhsType, rhsType, op)?.register() ?: TyUnknown
             }
             is AssignmentOp -> {
-                ctx.addAdjustment(expr.left, Adjustment.Borrow(lhsType, MUTABLE))
                 if (op is OverloadableBinaryOperator) {
+                    if (lhsType is TyReference) {
+                        ctx.addAdjustment(expr.left, BorrowReference(lhsType, lhsType.region, MUTABLE))
+                    }
                     val rhsType = resolveTypeVarsWithObligations(expr.right?.inferType() ?: TyUnknown)
                     lookup.selectOverloadedOp(lhsType, rhsType, op).ok()
                         ?.nestedObligations?.forEach(fulfill::registerPredicateObligation)
@@ -1385,7 +1393,9 @@ class RsFnInferenceContext(
         val indexExpr = expr.indexExpr ?: return TyUnknown
 
         val indexType = ctx.resolveTypeVarsIfPossible(indexExpr.inferType())
-        ctx.addAdjustment(indexExpr, Adjustment.Borrow(indexType, IMMUTABLE)) // TODO
+        if (indexType is TyReference) {
+            ctx.addAdjustment(indexExpr, Adjustment.BorrowReference(indexType, indexType.region, IMMUTABLE)) // TODO
+        }
 
         var derefCount = -1 // starts with -1 because the fist element of the coercion sequence is the type itself
         var prevType: Ty? = null
