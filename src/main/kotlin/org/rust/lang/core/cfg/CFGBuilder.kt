@@ -265,9 +265,13 @@ class CFGBuilder(val graph: Graph<CFGNodeData, CFGEdgeData>, val entry: CFGNode,
             val rightExit = process(binaryExpr.right, leftExit)
             finishWith { addAstNode(binaryExpr, leftExit, rightExit) }
         } else {
-            finishWith { straightLine(binaryExpr, pred, listOf(binaryExpr.left, binaryExpr.right)) }
+            val method = binaryExpr.binaryOp.reference.resolve()
+            if (method != null) {
+                finishWith { processCall(binaryExpr, binaryExpr.left, listOf(binaryExpr.right)) }
+            } else {
+                finishWith { straightLine(binaryExpr, pred, listOf(binaryExpr.left, binaryExpr.right)) }
+            }
         }
-        // TODO: method calls
     }
 
     override fun visitRetExpr(retExpr: RsRetExpr) {
