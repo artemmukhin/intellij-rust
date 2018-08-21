@@ -16,7 +16,6 @@ import org.jetbrains.annotations.TestOnly
 import org.rust.lang.core.psi.*
 import org.rust.lang.core.psi.ext.*
 import org.rust.lang.core.resolve.ImplLookup
-import org.rust.lang.core.resolve.Selection
 import org.rust.lang.core.resolve.SelectionResult
 import org.rust.lang.core.resolve.StdKnownItems
 import org.rust.lang.core.resolve.ref.*
@@ -1305,26 +1304,28 @@ class RsFnInferenceContext(
                 if (op is OverloadableBinaryOperator) {
                     val rhsType = resolveTypeVarsWithObligations(expr.right?.inferType() ?: TyUnknown)
 
-                    val lookup = ImplLookup.relativeTo(expr)
-                    val method = lookup.findOverloadedOpImpl(lhsType, rhsType, op)
-                        ?.members
-                        ?.functionList
-                        ?.find { it.name == op.fnName }
-
-                    if (method != null && lhsType !is TyPrimitive) {
-                        ctx.addAdjustment(expr.left, BorrowReference(lazy {
-                            method.selfParameter?.typeReference?.type ?: TyReference(lhsType, IMMUTABLE)
-                        }))
-                        expr.right?.let { ctx.addAdjustment(it, BorrowReference(lazy { method.valueParameters.firstOrNull()?.typeReference?.type })) }
-                    }
                     run {
                         // TODO replace it via `selectOverloadedOp` and share the code with `AssignmentOp`
                         // branch when cmp ops will become a real lang items in std
                         val trait = items.findCoreItem("cmp::${op.traitName}") as? RsTraitItem
-                            ?: return@run SelectionResult.Err<Selection>()
+                            ?: return@run null
 
-                        lookup.select(TraitRef(lhsType, trait.withSubst(rhsType)))
-                    }.ok()?.nestedObligations?.forEach(fulfill::registerPredicateObligation)
+                        val selection = lookup.select(TraitRef(lhsType, trait.withSubst(rhsType))).ok()
+
+                        val method = selection?.impl
+                            ?.members
+                            ?.functionList
+                            ?.find { it.name == op.fnName }
+
+                        if (method != null && lhsType !is TyPrimitive) {
+                            ctx.addAdjustment(expr.left, BorrowReference(lazy {
+                                method.selfParameter?.typeReference?.type ?: TyReference(lhsType, IMMUTABLE)
+                            }))
+                            expr.right?.let { ctx.addAdjustment(it, BorrowReference(lazy { method.valueParameters.firstOrNull()?.typeReference?.type })) }
+                        }
+
+                        selection
+                    }?.nestedObligations?.forEach(fulfill::registerPredicateObligation)
                 } else {
                     expr.right?.inferTypeCoercableTo(lhsType)
                 }
@@ -1337,9 +1338,9 @@ class RsFnInferenceContext(
             is AssignmentOp -> {
                 if (op is OverloadableBinaryOperator) {
                     val rhsType = resolveTypeVarsWithObligations(expr.right?.inferType() ?: TyUnknown)
+                    val selection = lookup.selectOverloadedOp(lhsType, rhsType, op).ok()
 
-                    val lookup = ImplLookup.relativeTo(expr)
-                    val method = lookup.findOverloadedOpImpl(lhsType, rhsType, op)
+                    val method = selection?.impl
                         ?.members
                         ?.functionList
                         ?.find { it.name == op.fnName }
@@ -1348,8 +1349,7 @@ class RsFnInferenceContext(
                         ctx.addAdjustment(expr.left, BorrowReference(lazy { method.selfParameter?.typeReference?.type }))
                     }
 
-                    lookup.selectOverloadedOp(lhsType, rhsType, op).ok()
-                        ?.nestedObligations?.forEach(fulfill::registerPredicateObligation)
+                    selection?.nestedObligations?.forEach(fulfill::registerPredicateObligation)
                 } else {
                     expr.right?.inferTypeCoercableTo(lhsType)
                 }
