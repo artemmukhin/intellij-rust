@@ -444,7 +444,6 @@ class RsBorrowCheckerInspectionTest : RsInspectionsTestBase(RsBorrowCheckerInspe
         }
     """)
 
-    // TODO: this test doesn't work correctly because `x == y` is actually a method call `x.eq(&y)` (not supported)
     fun `test borrowck binary expr as method call`() = checkByText("""
         #[derive (PartialEq)]
         struct S { data: i32 }
@@ -453,7 +452,7 @@ class RsBorrowCheckerInspectionTest : RsInspectionsTestBase(RsBorrowCheckerInspe
             let x = S { data: 42 };
             let y = S { data: 1 };
             if x == y {
-                <error descr="Use of moved value">x</error>; // TODO
+                x;
             }
         }
     """)

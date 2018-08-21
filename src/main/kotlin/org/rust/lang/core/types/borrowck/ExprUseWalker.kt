@@ -346,7 +346,11 @@ class ExprUseWalker(
                     // TODO: overloaded deref support needed
                 }
                 is Adjustment.BorrowReference -> {
-                    delegate.borrow(expr, cmt, adjustment.region, BorrowKind.from(adjustment.mutability), AutoRef)
+                    val region = adjustment.region.value
+                    val mutability = adjustment.mutability.value
+                    if (region != null && mutability != null) {
+                        delegate.borrow(expr, cmt, region, BorrowKind.from(mutability), AutoRef)
+                    }
                 }
                 is Adjustment.BorrowPointer -> {
                     // TODO

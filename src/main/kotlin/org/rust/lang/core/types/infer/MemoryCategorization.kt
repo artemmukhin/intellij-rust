@@ -211,14 +211,20 @@ class MemoryCategorizationContext(val infcx: RsInferenceContext) {
         return processExprAdjustedWith(expr, adjustments.asReversed().iterator())
     }
 
-    private fun processExprAdjustedWith(expr: RsExpr, adjustments: Iterator<Adjustment>): Cmt =
-        when (adjustments.nextOrNull()) {
+    private fun processExprAdjustedWith(expr: RsExpr, adjustments: Iterator<Adjustment>): Cmt {
+        val adjustment = adjustments.nextOrNull()
+        return when (adjustment) {
             is Adjustment.Deref -> {
                 // TODO: overloaded deref
                 processDeref(expr, processExprAdjustedWith(expr, adjustments))
             }
+            is Adjustment.BorrowReference, is Adjustment.BorrowPointer -> {
+                val target = adjustment.target.value
+                processRvalue(expr, target ?: expr.type)
+            }
             else -> processExprUnadjusted(expr)
         }
+    }
 
     fun processExprUnadjusted(expr: RsExpr): Cmt =
         when (expr) {
@@ -296,8 +302,8 @@ class MemoryCategorizationContext(val infcx: RsInferenceContext) {
 
     // `rvalue_promotable_map` is needed to distinguish rvalues with static region and rvalue with temporary region,
     // so now all rvalues have static region
-    fun processRvalue(expr: RsExpr): Cmt =
-        Cmt(expr, Rvalue(ReStatic), Declared, expr.type)
+    fun processRvalue(expr: RsExpr, ty: Ty = expr.type): Cmt =
+        Cmt(expr, Rvalue(ReStatic), Declared, ty)
 
     fun processRvalue(element: RsElement, tempScope: Region, ty: Ty): Cmt =
         Cmt(element, Rvalue(tempScope), Declared, ty)
