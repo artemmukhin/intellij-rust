@@ -42,6 +42,7 @@ fun inferTypesIn(element: RsInferenceContextOwner): RsInferenceResult {
 
 sealed class Adjustment(val target: Ty) {
     class Deref(target: Ty) : Adjustment(target)
+    class Borrow(target: Ty, val mutability: Mutability) : Adjustment(target)
 }
 
 /**
@@ -1294,6 +1295,8 @@ class RsFnInferenceContext(
             is BoolOp -> {
                 if (op is OverloadableBinaryOperator) {
                     val rhsType = resolveTypeVarsWithObligations(expr.right?.inferType() ?: TyUnknown)
+                    ctx.addAdjustment(expr.left, Adjustment.Borrow(lhsType, IMMUTABLE))
+                    expr.right?.let { ctx.addAdjustment(it, Adjustment.Borrow(rhsType, IMMUTABLE)) }
                     run {
                         // TODO replace it via `selectOverloadedOp` and share the code with `AssignmentOp`
                         // branch when cmp ops will become a real lang items in std
@@ -1312,6 +1315,7 @@ class RsFnInferenceContext(
                 lookup.findArithmeticBinaryExprOutputType(lhsType, rhsType, op)?.register() ?: TyUnknown
             }
             is AssignmentOp -> {
+                ctx.addAdjustment(expr.left, Adjustment.Borrow(lhsType, MUTABLE))
                 if (op is OverloadableBinaryOperator) {
                     val rhsType = resolveTypeVarsWithObligations(expr.right?.inferType() ?: TyUnknown)
                     lookup.selectOverloadedOp(lhsType, rhsType, op).ok()
@@ -1378,7 +1382,10 @@ class RsFnInferenceContext(
             prevType is TyArray && type is TySlice
 
         val containerType = expr.containerExpr?.inferType() ?: return TyUnknown
-        val indexType = ctx.resolveTypeVarsIfPossible(expr.indexExpr?.inferType() ?: return TyUnknown)
+        val indexExpr = expr.indexExpr ?: return TyUnknown
+
+        val indexType = ctx.resolveTypeVarsIfPossible(indexExpr.inferType())
+        ctx.addAdjustment(indexExpr, Adjustment.Borrow(indexType, IMMUTABLE)) // TODO
 
         var derefCount = -1 // starts with -1 because the fist element of the coercion sequence is the type itself
         var prevType: Ty? = null

@@ -342,7 +342,14 @@ class ExprUseWalker(
         val adjustments = expr.inference?.adjustments?.get(expr) ?: emptyList()
         val cmt = mc.processExprUnadjusted(expr)
         for (adjustment in adjustments) {
-            // TODO: overloaded deref support needed
+            when (adjustment) {
+                is Adjustment.Deref -> {
+                    // TODO: overloaded deref support needed
+                }
+                is Adjustment.Borrow -> {
+
+                }
+            }
         }
     }
 
