@@ -22,7 +22,6 @@ import org.rust.lang.core.types.infer.Categorization.Local
 import org.rust.lang.core.types.infer.Cmt
 import org.rust.lang.core.types.infer.MemoryCategorizationContext
 import org.rust.lang.core.types.regions.*
-import org.rust.lang.core.types.ty.Ty
 import org.rust.lang.core.types.ty.TyUnknown
 import org.rust.lang.core.types.type
 
@@ -58,7 +57,13 @@ class GatherLoanContext(
     }
 
     override fun declarationWithoutInit(element: RsElement) {
-        gmcx.gatherDeclaration(moveData, element, element.type)
+        val type = when (element) {
+            is RsExpr -> element.type
+            is RsExprStmt -> element.expr.type
+            is RsPatBinding -> element.type
+            else -> TyUnknown
+        }
+        gmcx.gatherDeclaration(moveData, element, type)
     }
 
     override fun mutate(assignmentElement: RsElement, assigneeCmt: Cmt, mode: MutateMode) {
@@ -247,11 +252,3 @@ fun guaranteeLifetime(bccx: BorrowCheckContext, scope: Scope, cause: LoanCause, 
 
 fun computeRestrictions(bccx: BorrowCheckContext, cause: LoanCause, cmt: Cmt, loanRegion: Region): RestrictionResult =
     RestrictionContext(bccx, loanRegion, cause).restrict(cmt)
-
-val RsElement.type: Ty
-    get() = when (this) {
-        is RsExpr -> this.type
-        is RsExprStmt -> expr.type
-        is RsPatBinding -> this.type
-        else -> TyUnknown
-    }
