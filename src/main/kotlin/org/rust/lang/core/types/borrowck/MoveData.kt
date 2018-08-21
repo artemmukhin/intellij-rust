@@ -266,14 +266,12 @@ class FlowedMoveData(moveData: MoveData, bccx: BorrowCheckContext, cfg: ControlF
 
     init {
         val dfcxMoves = DataFlowContext(
-            "flowed_move_data_moves",
             body,
             cfg,
             MoveDataFlowOperator,
             moveData.moves.size
         )
         val dfcxAssign = DataFlowContext(
-            "flowed_move_data_assigns",
             body,
             cfg,
             AssignDataFlowOperator,

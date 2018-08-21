@@ -14,21 +14,20 @@ import java.util.*
 
 enum class EntryOrExit { Entry, Exit }
 
-class DataFlowContext<O : DataFlowOperator>(val analysisName: String,
-                                            val body: RsBlock,
+class DataFlowContext<O : DataFlowOperator>(val body: RsBlock,
                                             val cfg: ControlFlowGraph,
                                             val oper: O,
                                             val bitsPerElement: Int) {
-    val bitsPerInt: Int = 32
-    val wordsPerElement: Int
-    val gens: MutableList<Int>          //
-    val scopeKills: MutableList<Int>    // todo: maybe it's better to use BitSet
-    val actionKills: MutableList<Int>   //
-    val onEntry: MutableList<Int>
-    val localIndexTable: HashMap<RsElement, MutableList<CFGNode>>
+    private val bitsPerInt: Int = 32
+    private val wordsPerElement: Int
+    private val gens: MutableList<Int>          // TODO: use BitSet
+    private val scopeKills: MutableList<Int>    // TODO: use BitSet
+    private val actionKills: MutableList<Int>   // TODO: use BitSet
+    val onEntry: MutableList<Int>               // TODO: use BitSet
+    private val cfgTable: HashMap<RsElement, MutableList<CFGNode>>
 
     init {
-        val nodesCount = cfg.graph.size
+        val nodesCount = cfg.graph.nodesCount
         val entry = oper.neutralElement
 
         this.wordsPerElement = (bitsPerElement + bitsPerInt - 1) / bitsPerInt
@@ -36,14 +35,14 @@ class DataFlowContext<O : DataFlowOperator>(val analysisName: String,
         this.actionKills = MutableList(nodesCount * wordsPerElement) { 0 }
         this.scopeKills = MutableList(nodesCount * wordsPerElement) { 0 }
         this.onEntry = MutableList(nodesCount * wordsPerElement) { entry }
-        this.localIndexTable = cfg.buildLocalIndex()
+        this.cfgTable = cfg.buildLocalIndex()
     }
 
-    private fun getCfgNodes(element: RsElement) = localIndexTable.getOrDefault(element, mutableListOf())
+    private fun getCfgNodes(element: RsElement) = cfgTable.getOrDefault(element, mutableListOf())
 
-    private fun hasBitSetForLocalElement(element: RsElement): Boolean = localIndexTable.containsKey(element)
+    private fun hasBitSetForElement(element: RsElement): Boolean = cfgTable.containsKey(element)
 
-    fun computeIdRange(node: CFGNode): Pair<Int, Int> {
+    fun getRange(node: CFGNode): Pair<Int, Int> {
         val start = node.index * wordsPerElement
         val end = start + wordsPerElement
         return Pair(start, end)
@@ -61,14 +60,14 @@ class DataFlowContext<O : DataFlowOperator>(val analysisName: String,
 
     fun addGen(element: RsElement, bit: Int) {
         getCfgNodes(element).forEach {
-            val (start, end) = computeIdRange(it)
+            val (start, end) = getRange(it)
             setBit(gens.subList(start, end), bit)
         }
     }
 
     fun addKill(kind: KillFrom, element: RsElement, bit: Int) {
         getCfgNodes(element).forEach {
-            val (start, end) = computeIdRange(it)
+            val (start, end) = getRange(it)
             when (kind) {
                 KillFrom.ScopeEnd -> setBit(scopeKills.subList(start, end), bit)
                 KillFrom.Execution -> setBit(actionKills.subList(start, end), bit)
@@ -77,7 +76,7 @@ class DataFlowContext<O : DataFlowOperator>(val analysisName: String,
     }
 
     fun applyGenKill(node: CFGNode, bits: List<Int>): MutableList<Int> {
-        val (start, end) = computeIdRange(node)
+        val (start, end) = getRange(node)
         val result = bits.toMutableList()
         Union.bitwise(result, gens.subList(start, end))
         Subtract.bitwise(result, actionKills.subList(start, end))
@@ -85,36 +84,36 @@ class DataFlowContext<O : DataFlowOperator>(val analysisName: String,
         return result
     }
 
-    fun eachBitOnEntry(element: RsElement, f: (Int) -> Boolean): Boolean {
-        if (!hasBitSetForLocalElement(element)) return true
+    fun eachBitOnEntry(element: RsElement, predicate: (Int) -> Boolean): Boolean {
+        if (!hasBitSetForElement(element)) return true
         val nodes = getCfgNodes(element)
-        return nodes.all { eachBitForNode(EntryOrExit.Entry, it, f) }
+        return nodes.all { eachBitForNode(EntryOrExit.Entry, it, predicate) }
     }
 
-    fun eachBitForNode(e: EntryOrExit, node: CFGNode, f: (Int) -> Boolean): Boolean {
+    fun eachBitForNode(e: EntryOrExit, node: CFGNode, predicate: (Int) -> Boolean): Boolean {
         if (bitsPerElement == 0) return true
 
-        val (start, end) = computeIdRange(node)
+        val (start, end) = getRange(node)
         val onEntry = onEntry.subList(start, end)
         val slice = when (e) {
             EntryOrExit.Entry -> onEntry
             EntryOrExit.Exit -> applyGenKill(node, onEntry)
         }
-        return eachBit(slice, f)
+        return eachBit(slice, predicate)
     }
 
-    fun eachGenBit(element: RsElement, f: (Int) -> Boolean): Boolean {
-        if (!hasBitSetForLocalElement(element)) return true
+    fun eachGenBit(element: RsElement, predicate: (Int) -> Boolean): Boolean {
+        if (!hasBitSetForElement(element)) return true
         if (bitsPerElement == 0) return true
 
         val nodes = getCfgNodes(element)
         return nodes.all {
-            val (start, end) = computeIdRange(it)
-            eachBit(gens.subList(start, end), f)
+            val (start, end) = getRange(it)
+            eachBit(gens.subList(start, end), predicate)
         }
     }
 
-    fun eachBit(words: List<Int>, f: (Int) -> Boolean): Boolean {
+    private fun eachBit(words: List<Int>, predicate: (Int) -> Boolean): Boolean {
         words.filter { it != 0 }.forEachIndexed { index, word ->
             val baseIndex = index * bitsPerInt
             for (offset in 0..bitsPerInt) {
@@ -123,7 +122,7 @@ class DataFlowContext<O : DataFlowOperator>(val analysisName: String,
                     val bitIndex = baseIndex + offset
                     if (bitIndex >= bitsPerElement) {
                         return true
-                    } else if (!f(bitIndex)) {
+                    } else if (!predicate(bitIndex)) {
                         return false
                     }
                 }
@@ -132,7 +131,7 @@ class DataFlowContext<O : DataFlowOperator>(val analysisName: String,
         return true
     }
 
-    // TODO: requires regions which are not implemented yet
+    // TODO: requires `break` and `continue` control flow and regions which are not implemented yet
     fun addKillsFromFlowExits() {}
 
     fun propagate() {
@@ -140,9 +139,7 @@ class DataFlowContext<O : DataFlowOperator>(val analysisName: String,
 
         val propagationContext = PropagationContext(this, true)
         val nodesInPostOrder = cfg.graph.nodesInPostOrder(cfg.entry)
-        var numberOfPasses = 0
         while (propagationContext.changed) {
-            numberOfPasses++
             propagationContext.changed = false
             propagationContext.walkCfg(nodesInPostOrder)
         }
@@ -184,7 +181,7 @@ class PropagationContext<O : DataFlowOperator>(val dataFlowContext: DataFlowCont
     fun walkCfg(nodesInPostOrder: List<CFGNode>) {
         // walking in reverse post-order
         nodesInPostOrder.asReversed().forEach { node ->
-            val (start, end) = dataFlowContext.computeIdRange(node)
+            val (start, end) = dataFlowContext.getRange(node)
             val onEntry = dataFlowContext.onEntry.subList(start, end).toList()
             val result = dataFlowContext.applyGenKill(node, onEntry)
             propagateBitsIntoGraphSuccessorsOf(result, node)
@@ -198,10 +195,12 @@ class PropagationContext<O : DataFlowOperator>(val dataFlowContext: DataFlowCont
 
     private fun propagateBitsIntoEntrySetFor(predBits: List<Int>, edge: CFGEdge) {
         val target = edge.target
-        val (start, end) = dataFlowContext.computeIdRange(target)
+        val (start, end) = dataFlowContext.getRange(target)
         val onEntry = dataFlowContext.onEntry.subList(start, end)
         val changed = dataFlowContext.oper.bitwise(onEntry, predBits)
-        if (changed) this.changed = true
+        if (changed) {
+            this.changed = true
+        }
     }
 }
 
