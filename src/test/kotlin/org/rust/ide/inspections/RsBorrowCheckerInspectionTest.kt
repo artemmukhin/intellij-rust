@@ -457,6 +457,33 @@ class RsBorrowCheckerInspectionTest : RsInspectionsTestBase(RsBorrowCheckerInspe
         }
     """)
 
+    fun `test borrowck ref`() = checkByText("""
+        #[derive (PartialEq)]
+        struct S { }
+
+        fn main() {
+            let x = Some(& S{});
+            let y = Some(S{});
+
+            match x {
+                Some(ref s) if *s == y => { *s; }
+            }
+        }
+    """)
+
+    fun `test borrowck method call`() = checkByText("""
+        struct S { }
+        impl S {
+            fn f(&self) {}
+        }
+
+        fn main() {
+            let x = S {};
+            x.f();
+            x;
+        }
+    """)
+
     // TODO
     fun `test borrowck borrow`() = checkByText("""
         struct S { data: i32 }

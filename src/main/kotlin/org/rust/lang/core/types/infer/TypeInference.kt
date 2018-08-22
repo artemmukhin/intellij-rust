@@ -42,15 +42,15 @@ fun inferTypesIn(element: RsInferenceContextOwner): RsInferenceResult {
         ?: error("Can not run nested type inference")
 }
 
-sealed class Adjustment(val target: Lazy<Ty?>) {
-    class Deref(target: Lazy<Ty?>) : Adjustment(target)
+sealed class Adjustment(val target: Ty) {
+    class Deref(target: Ty) : Adjustment(target)
     class BorrowReference(
-        target: Lazy<Ty?>,
-        val region: Lazy<Region?> = lazy { (target.value as? TyReference)?.region },
-        val mutability: Lazy<Mutability?> = lazy { (target.value as? TyReference)?.mutability }
+        target: Ty,
+        val region: Lazy<Region?> = lazy { (target as? TyReference)?.region },
+        val mutability: Lazy<Mutability?> = lazy { (target as? TyReference)?.mutability }
     ) : Adjustment(target)
 
-    class BorrowPointer(target: Lazy<Ty>, val mutability: Mutability) : Adjustment(target)
+    class BorrowPointer(target: Ty, val mutability: Mutability) : Adjustment(target)
 }
 
 /**
@@ -1061,6 +1061,13 @@ class RsFnInferenceContext(
                 }
             }
         }
+        // TODO: borrow adjustments for self parameter
+        /*
+        if (callee.selfTy is TyReference) {
+            val adjustment = BorrowReference( callee.selfTy)
+            ctx.addAdjustment(methodCall.receiver, adjustment)
+        }
+        */
 
         typeParameters = instantiateBounds(callee.element, callee.selfTy, typeParameters)
 
@@ -1180,7 +1187,7 @@ class RsFnInferenceContext(
             }
             return TyUnknown
         }
-        ctx.addAdjustment(fieldLookup.parentDotExpr.expr, Deref(lazy { receiver }), field.derefCount)
+        ctx.addAdjustment(fieldLookup.parentDotExpr.expr, Deref(receiver), field.derefCount)
 
         val fieldElement = field.element
 
@@ -1310,7 +1317,8 @@ class RsFnInferenceContext(
                         val trait = items.findCoreItem("cmp::${op.traitName}") as? RsTraitItem
                             ?: return@run null
 
-                        val selection = lookup.select(TraitRef(lhsType, trait.withSubst(rhsType))).ok()
+                        val boundTrait = trait.withSubst(rhsType)
+                        val selection = lookup.select(TraitRef(lhsType, boundTrait)).ok()
 
                         val method = selection?.impl
                             ?.members
@@ -1318,14 +1326,12 @@ class RsFnInferenceContext(
                             ?.find { it.name == op.fnName }
 
                         if (method != null && lhsType !is TyPrimitive) {
-                            val lhsAdjustment = BorrowReference(lazy {
-                                method.selfParameter?.typeReference?.type ?: TyReference(lhsType, IMMUTABLE)
-                            })
+                            val selfParameterType = method.selfParameter?.typeOfValue(lhsType)
+                            val lhsAdjustment = BorrowReference(selfParameterType ?: TyUnknown)
                             ctx.addAdjustment(expr.left, lhsAdjustment)
 
-                            val rhsAdjustment = BorrowReference(lazy {
-                                method.valueParameters.firstOrNull()?.typeReference?.type
-                            })
+                            val parameterType = method.valueParameters.firstOrNull()?.typeReference?.type?.substitute(boundTrait.subst)
+                            val rhsAdjustment = BorrowReference(parameterType ?: TyUnknown)
                             expr.right?.let { ctx.addAdjustment(it, rhsAdjustment) }
                         }
 
@@ -1351,7 +1357,7 @@ class RsFnInferenceContext(
                         ?.find { it.name == op.fnName }
 
                     if (method != null && lhsType !is TyPrimitive) {
-                        val adjustment = BorrowReference(lazy { method.selfParameter?.typeReference?.type })
+                        val adjustment = BorrowReference(method.selfParameter?.typeOfValue(lhsType) ?: TyUnknown)
                         ctx.addAdjustment(expr.left, adjustment)
                     }
 
@@ -1422,7 +1428,7 @@ class RsFnInferenceContext(
 
         val indexType = ctx.resolveTypeVarsIfPossible(indexExpr.inferType())
         if (indexType is TyReference) {
-            ctx.addAdjustment(indexExpr, Adjustment.BorrowReference(lazy { indexType })) // TODO
+            ctx.addAdjustment(indexExpr, Adjustment.BorrowReference(indexType)) // TODO
         }
 
         var derefCount = -1 // starts with -1 because the fist element of the coercion sequence is the type itself
@@ -1432,7 +1438,7 @@ class RsFnInferenceContext(
 
             val outputType = lookup.findIndexOutputType(type, indexType)
             if (outputType != null) {
-                expr.containerExpr?.let { ctx.addAdjustment(it, Adjustment.Deref(lazy { containerType }), derefCount) }
+                expr.containerExpr?.let { ctx.addAdjustment(it, Adjustment.Deref(containerType), derefCount) }
                 return outputType.register()
             }
 

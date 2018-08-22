@@ -219,8 +219,8 @@ class MemoryCategorizationContext(val infcx: RsInferenceContext) {
                 processDeref(expr, processExprAdjustedWith(expr, adjustments))
             }
             is Adjustment.BorrowReference, is Adjustment.BorrowPointer -> {
-                val target = adjustment.target.value
-                processRvalue(expr, target ?: expr.type)
+                val target = adjustment.target
+                processRvalue(expr, target)
             }
             else -> processExprUnadjusted(expr)
         }
