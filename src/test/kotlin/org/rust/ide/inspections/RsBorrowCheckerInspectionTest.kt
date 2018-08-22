@@ -457,16 +457,14 @@ class RsBorrowCheckerInspectionTest : RsInspectionsTestBase(RsBorrowCheckerInspe
         }
     """)
 
-    fun `test borrowck ref`() = checkByText("""
-        #[derive (PartialEq)]
-        struct S { }
-
+    fun `test borrowck ref String and &str`() = checkByText("""
+        use std::string::String;
+        enum E { A(String), B }
         fn main() {
-            let x = Some(& S{});
-            let y = Some(S{});
-
+            let x = E::A(String::from("abc"));
             match x {
-                Some(ref s) if *s == y => { *s; }
+                E::A(ref s) if *s == "abc" => {}
+                _ => {}
             }
         }
     """)

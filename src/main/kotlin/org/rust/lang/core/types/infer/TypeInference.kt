@@ -1333,6 +1333,14 @@ class RsFnInferenceContext(
                             val parameterType = method.valueParameters.firstOrNull()?.typeReference?.type?.substitute(boundTrait.subst)
                             val rhsAdjustment = BorrowReference(parameterType ?: TyUnknown)
                             expr.right?.let { ctx.addAdjustment(it, rhsAdjustment) }
+                        } else if (lhsType !is TyPrimitive) {
+                            val selfParameterType = TyReference(lhsType, IMMUTABLE)
+                            val lhsAdjustment = BorrowReference(selfParameterType)
+                            ctx.addAdjustment(expr.left, lhsAdjustment)
+
+                            val parameterType = TyReference(rhsType, IMMUTABLE)
+                            val rhsAdjustment = BorrowReference(parameterType)
+                            expr.right?.let { ctx.addAdjustment(it, rhsAdjustment) }
                         }
 
                         selection
