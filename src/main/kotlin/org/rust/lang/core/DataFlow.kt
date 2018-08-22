@@ -18,8 +18,11 @@ class DataFlowContext<O : DataFlowOperator>(val body: RsBlock,
                                             val cfg: ControlFlowGraph,
                                             val oper: O,
                                             val bitsPerElement: Int) {
-    private val bitsPerInt: Int = 32
-    private val wordsPerElement: Int
+    companion object {
+        private const val bitsPerInt: Int = 32
+    }
+
+    private val wordsPerElement: Int = (bitsPerElement + bitsPerInt - 1) / bitsPerInt
     private val gens: MutableList<Int>          // TODO: use BitSet
     private val scopeKills: MutableList<Int>    // TODO: use BitSet
     private val actionKills: MutableList<Int>   // TODO: use BitSet
@@ -27,14 +30,12 @@ class DataFlowContext<O : DataFlowOperator>(val body: RsBlock,
     private val cfgTable: HashMap<RsElement, MutableList<CFGNode>>
 
     init {
-        val nodesCount = cfg.graph.nodesCount
-        val entry = oper.neutralElement
+        val size = cfg.graph.nodesCount * wordsPerElement
 
-        this.wordsPerElement = (bitsPerElement + bitsPerInt - 1) / bitsPerInt
-        this.gens = MutableList(nodesCount * wordsPerElement) { 0 }
-        this.actionKills = MutableList(nodesCount * wordsPerElement) { 0 }
-        this.scopeKills = MutableList(nodesCount * wordsPerElement) { 0 }
-        this.onEntry = MutableList(nodesCount * wordsPerElement) { entry }
+        this.gens = MutableList(size) { 0 }
+        this.actionKills = MutableList(size) { 0 }
+        this.scopeKills = MutableList(size) { 0 }
+        this.onEntry = MutableList(size) { oper.neutralElement }
         this.cfgTable = cfg.buildLocalIndex()
     }
 

@@ -1318,10 +1318,15 @@ class RsFnInferenceContext(
                             ?.find { it.name == op.fnName }
 
                         if (method != null && lhsType !is TyPrimitive) {
-                            ctx.addAdjustment(expr.left, BorrowReference(lazy {
+                            val lhsAdjustment = BorrowReference(lazy {
                                 method.selfParameter?.typeReference?.type ?: TyReference(lhsType, IMMUTABLE)
-                            }))
-                            expr.right?.let { ctx.addAdjustment(it, BorrowReference(lazy { method.valueParameters.firstOrNull()?.typeReference?.type })) }
+                            })
+                            ctx.addAdjustment(expr.left, lhsAdjustment)
+
+                            val rhsAdjustment = BorrowReference(lazy {
+                                method.valueParameters.firstOrNull()?.typeReference?.type
+                            })
+                            expr.right?.let { ctx.addAdjustment(it, rhsAdjustment) }
                         }
 
                         selection
@@ -1346,7 +1351,8 @@ class RsFnInferenceContext(
                         ?.find { it.name == op.fnName }
 
                     if (method != null && lhsType !is TyPrimitive) {
-                        ctx.addAdjustment(expr.left, BorrowReference(lazy { method.selfParameter?.typeReference?.type }))
+                        val adjustment = BorrowReference(lazy { method.selfParameter?.typeReference?.type })
+                        ctx.addAdjustment(expr.left, adjustment)
                     }
 
                     selection?.nestedObligations?.forEach(fulfill::registerPredicateObligation)
