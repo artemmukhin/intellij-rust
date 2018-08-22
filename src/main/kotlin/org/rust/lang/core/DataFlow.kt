@@ -10,24 +10,21 @@ import org.rust.lang.core.cfg.CFGNode
 import org.rust.lang.core.cfg.ControlFlowGraph
 import org.rust.lang.core.psi.RsBlock
 import org.rust.lang.core.psi.ext.RsElement
-import java.util.*
 
 enum class EntryOrExit { Entry, Exit }
 
-class DataFlowContext<O : DataFlowOperator>(val body: RsBlock,
-                                            val cfg: ControlFlowGraph,
-                                            val oper: O,
-                                            val bitsPerElement: Int) {
-    companion object {
-        private const val bitsPerInt: Int = 32
-    }
+class DataFlowContext<O : DataFlowOperator>(
+    val body: RsBlock,
+    val cfg: ControlFlowGraph,
+    val oper: O,
+    val bitsPerElement: Int) {
 
-    private val wordsPerElement: Int = (bitsPerElement + bitsPerInt - 1) / bitsPerInt
+    private val wordsPerElement: Int = (bitsPerElement + BITS_PER_INT - 1) / BITS_PER_INT
     private val gens: MutableList<Int>          // TODO: use BitSet
     private val scopeKills: MutableList<Int>    // TODO: use BitSet
     private val actionKills: MutableList<Int>   // TODO: use BitSet
     val onEntry: MutableList<Int>               // TODO: use BitSet
-    private val cfgTable: HashMap<RsElement, MutableList<CFGNode>>
+    private val cfgTable: MutableMap<RsElement, MutableList<CFGNode>>
 
     init {
         val size = cfg.graph.nodesCount * wordsPerElement
@@ -39,7 +36,7 @@ class DataFlowContext<O : DataFlowOperator>(val body: RsBlock,
         this.cfgTable = cfg.buildLocalIndex()
     }
 
-    private fun getCfgNodes(element: RsElement) = cfgTable.getOrDefault(element, mutableListOf())
+    private fun getCfgNodes(element: RsElement): List<CFGNode> = cfgTable.getOrDefault(element, mutableListOf())
 
     private fun hasBitSetForElement(element: RsElement): Boolean = cfgTable.containsKey(element)
 
@@ -50,8 +47,8 @@ class DataFlowContext<O : DataFlowOperator>(val body: RsBlock,
     }
 
     private fun setBit(words: MutableList<Int>, bit: Int): Boolean {
-        val word = bit / bitsPerInt
-        val bitInWord = bit % bitsPerInt
+        val word = bit / BITS_PER_INT
+        val bitInWord = bit % BITS_PER_INT
         val bitMask = 1 shl bitInWord
         val oldValue = words[word]
         val newValue = oldValue or bitMask
@@ -116,8 +113,8 @@ class DataFlowContext<O : DataFlowOperator>(val body: RsBlock,
 
     private fun eachBit(words: List<Int>, predicate: (Int) -> Boolean): Boolean {
         words.filter { it != 0 }.forEachIndexed { index, word ->
-            val baseIndex = index * bitsPerInt
-            for (offset in 0..bitsPerInt) {
+            val baseIndex = index * BITS_PER_INT
+            for (offset in 0 until BITS_PER_INT) {
                 val bit = 1 shl offset
                 if (word and bit != 0) {
                     val bitIndex = baseIndex + offset
@@ -144,6 +141,10 @@ class DataFlowContext<O : DataFlowOperator>(val body: RsBlock,
             propagationContext.changed = false
             propagationContext.walkCfg(nodesInPostOrder)
         }
+    }
+
+    companion object {
+        private const val BITS_PER_INT: Int = 32
     }
 }
 
