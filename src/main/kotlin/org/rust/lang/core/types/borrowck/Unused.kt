@@ -6,19 +6,23 @@
 package org.rust.lang.core.types.borrowck
 
 import org.rust.lang.core.psi.*
-import org.rust.lang.core.psi.ext.RsBindingModeKind
-import org.rust.lang.core.psi.ext.RsElement
-import org.rust.lang.core.psi.ext.descendantsOfType
-import org.rust.lang.core.psi.ext.kind
+import org.rust.lang.core.psi.ext.*
 
-fun check(bccx: BorrowCheckContext, body: RsBlock) {
-    var usedMut = bccx.usedMutNodes
-    val finder = UsedMutVisitor(bccx, usedMut)
-    finder.visit(body)
+fun check(bccx: BorrowCheckContext, function: RsFunction) {
+    val body = function.block ?: return
+    val usedMut = HashSet<RsElement>(bccx.usedMutNodes)
+
+    val usedMutVisitor = UsedMutVisitor(bccx, usedMut)
+    usedMutVisitor.visitBlock(body)
+
+    val unusedMutVisitor = UnusedMutVisitor(bccx, usedMut)
+    function.valueParameters.mapNotNull { it.pat }.forEach {
+        unusedMutVisitor.checkUnusedMutPat(listOf(it))
+    }
+    unusedMutVisitor.visitBlock(body)
 }
 
-class UsedMutVisitor(val bccx: BorrowCheckContext, val set: MutableSet<RsElement>) : RsVisitor() {
-}
+class UsedMutVisitor(val bccx: BorrowCheckContext, val set: MutableSet<RsElement>) : RsVisitor()
 
 class UnusedMutVisitor(val bccx: BorrowCheckContext, val usedMut: MutableSet<RsElement>) : RsVisitor() {
     override fun visitMatchArm(arm: RsMatchArm) {
@@ -45,7 +49,7 @@ class UnusedMutVisitor(val bccx: BorrowCheckContext, val usedMut: MutableSet<RsE
             }
 
             val element = elements.first()
-            reportWarning(element)
+            // reportWarning(element)
         }
     }
 }
