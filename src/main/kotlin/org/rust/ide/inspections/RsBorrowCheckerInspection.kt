@@ -9,7 +9,7 @@ import com.intellij.codeInspection.ProblemsHolder
 import org.rust.ide.annotator.fixes.AddMutableFix
 import org.rust.lang.core.psi.*
 import org.rust.lang.core.psi.ext.*
-import org.rust.lang.core.types.borrowck.borrowck
+import org.rust.lang.core.types.borrowCheckResult
 import org.rust.lang.core.types.isMutable
 import org.rust.lang.core.types.ty.TyReference
 import org.rust.lang.core.types.type
@@ -34,7 +34,7 @@ class RsBorrowCheckerInspection : RsLocalInspectionTool() {
             }
 
             override fun visitFunction(func: RsFunction) {
-                val borrowCheckResult = borrowck(func) ?: return
+                val borrowCheckResult = func.borrowCheckResult
                 borrowCheckResult.usesOfMovedValue.forEach {
                     if (it.use != null) registerUseOfMovedValueProblem(holder, it.use)
                 }

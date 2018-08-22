@@ -13,6 +13,8 @@ import com.intellij.psi.util.CachedValueProvider.Result
 import com.intellij.psi.util.CachedValuesManager
 import org.rust.lang.core.psi.*
 import org.rust.lang.core.psi.ext.*
+import org.rust.lang.core.types.borrowck.BorrowCheckResult
+import org.rust.lang.core.types.borrowck.borrowck
 import org.rust.lang.core.types.infer.*
 import org.rust.lang.core.types.ty.*
 import org.rust.openapiext.recursionGuard
@@ -100,3 +102,19 @@ val RsExpr.cmt: Cmt?
 
 val RsExpr.isMutable: Boolean
     get() = cmt?.isMutable ?: Mutability.DEFAULT_MUTABILITY.isMut
+
+
+private val BORROW_CHECKER_KEY: Key<CachedValue<BorrowCheckResult>> =
+    Key.create("BORROW_CHECKER_KEY")
+
+val RsInferenceContextOwner.borrowCheckResult: BorrowCheckResult
+    get() = CachedValuesManager.getCachedValue(this, BORROW_CHECKER_KEY) {
+        val borrowCheck = borrowck(this)
+        val project = project
+
+        if (this is RsModificationTrackerOwner) {
+            Result.create(borrowCheck, project.rustStructureModificationTracker, modificationTracker)
+        } else {
+            Result.create(borrowCheck, project.rustStructureModificationTracker)
+        }
+    }
