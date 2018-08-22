@@ -484,6 +484,21 @@ class RsBorrowCheckerInspectionTest : RsInspectionsTestBase(RsBorrowCheckerInspe
         }
     """)
 
+    fun `test borrowck field getter`() = checkByText("""
+        struct S {
+            data: (u16, u16, u16)
+        }
+        impl S {
+            fn get_data(&self) -> (u16, u16, u16) { self.data }
+        }
+
+        fn main() {
+            let x = S { data: (1, 2, 3) };
+            x.get_data();
+            x;
+        }
+    """)
+
     // TODO
     fun `test borrowck borrow`() = checkByText("""
         struct S { data: i32 }
