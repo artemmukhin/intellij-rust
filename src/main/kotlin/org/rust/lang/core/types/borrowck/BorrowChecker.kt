@@ -125,7 +125,6 @@ class BorrowCheckContext(
     fun reportUseOfMovedValue(loanPath: LoanPath, move: Move) {
         usesOfMovedValue.add(UseOfMovedValueError(loanPath.containingExpr, move.element.ancestorOrSelf<RsStmt>()))
     }
-
 }
 
 fun borrowck(owner: RsInferenceContextOwner): BorrowCheckResult? {
@@ -133,14 +132,14 @@ fun borrowck(owner: RsInferenceContextOwner): BorrowCheckResult? {
     val regionScopeTree = getRegionScopeTree(owner)
     val bccx = BorrowCheckContext(regionScopeTree, owner, body)
 
-    val data = buildBorrowckDataflowData(bccx)
+    val data = buildBorrowCheckerData(bccx)
     if (data != null) {
         checkLoans(bccx, data.moveData, body)
     }
     return BorrowCheckResult(bccx.usesOfMovedValue, bccx.moveErrors)
 }
 
-fun buildBorrowckDataflowData(bccx: BorrowCheckContext): AnalysisData? {
+fun buildBorrowCheckerData(bccx: BorrowCheckContext): AnalysisData? {
     val moveData = gatherLoansInFn(bccx)
     if (moveData.isEmpty()) return null
 
