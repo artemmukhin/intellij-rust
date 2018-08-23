@@ -12,7 +12,7 @@ import org.rust.lang.core.psi.*
 import org.rust.lang.core.psi.ext.*
 import org.rust.lang.core.types.borrowCheckResult
 
-class RsMutDeclarationAnnotator : Annotator {
+class RsUnusedMutAnnotator : Annotator {
     override fun annotate(element: PsiElement, holder: AnnotationHolder) {
         val function = element as? RsFunction ?: return
 
