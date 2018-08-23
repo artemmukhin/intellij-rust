@@ -107,7 +107,7 @@ val RsExpr.isMutable: Boolean
 private val BORROW_CHECKER_KEY: Key<CachedValue<BorrowCheckResult>> =
     Key.create("BORROW_CHECKER_KEY")
 
-val RsInferenceContextOwner.borrowCheckResult: BorrowCheckResult
+val RsInferenceContextOwner.borrowCheckResult: BorrowCheckResult?
     get() = CachedValuesManager.getCachedValue(this, BORROW_CHECKER_KEY) {
         val borrowCheck = borrowck(this)
         val project = project

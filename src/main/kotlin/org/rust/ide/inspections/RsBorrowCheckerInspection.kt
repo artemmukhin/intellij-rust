@@ -34,7 +34,8 @@ class RsBorrowCheckerInspection : RsLocalInspectionTool() {
             }
 
             override fun visitFunction(func: RsFunction) {
-                val borrowCheckResult = func.borrowCheckResult
+                val borrowCheckResult = func.borrowCheckResult ?: return
+
                 borrowCheckResult.usesOfMovedValue.forEach {
                     if (it.use != null) registerUseOfMovedValueProblem(holder, it.use)
                 }

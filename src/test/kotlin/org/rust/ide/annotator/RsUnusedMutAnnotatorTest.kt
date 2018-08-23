@@ -19,16 +19,23 @@ class RsUnusedMutAnnotatorTest : RsAnnotationTestBase() {
     """)
 
     fun `test unused mut 2`() = checkWarnings("""
+        struct S { a: i32 }
+
+        fn f(s: &mut S) { s.a += 1; }
+
         fn main() {
             let <warning descr="Mut is unused">mut x</warning> = 1;
             let mut y = 2;
+            let mut z = S { a: 3 };
             let mut i = 0;
+
             while i < 10 {
                 if x > 0 {
                     y += x;
                 }
                 i += 1;
             }
+            f(&mut z);
         }
     """)
 

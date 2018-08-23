@@ -15,30 +15,24 @@ import org.rust.lang.core.types.borrowCheckResult
 class RsUnusedMutAnnotator : Annotator {
     override fun annotate(element: PsiElement, holder: AnnotationHolder) {
         val function = element as? RsFunction ?: return
+        val borrowCheckResult = function.borrowCheckResult ?: return
 
-        val borrowCheckResult = function.borrowCheckResult
-        val body = function.block ?: return
-        val usedMut = HashSet<RsElement>(borrowCheckResult.usedMutNodes)
-
-        val usedMutVisitor = UsedMutVisitor(holder, usedMut)
-        usedMutVisitor.visitBlock(body)
-
-        val unusedMutVisitor = UnusedMutVisitor(holder, usedMut)
+        val unusedMutVisitor = UnusedMutVisitor(holder, borrowCheckResult.usedMutNodes)
         /*
         function.valueParameters.mapNotNull { it.pat }.forEach {
             unusedMutVisitor.checkUnusedMutPat(listOf(it))
         }
         */
-        unusedMutVisitor.visitBlock(body)
+        unusedMutVisitor.visitFunction(function)
     }
 
 }
 
-class UsedMutVisitor(val holder: AnnotationHolder, val set: MutableSet<RsElement>) : RsVisitor() {
-    override fun visitBlock(block: RsBlock) {}
-}
-
 class UnusedMutVisitor(val holder: AnnotationHolder, val usedMut: MutableSet<RsElement>) : RsVisitor() {
+    override fun visitFunction(function: RsFunction) {
+        function.block?.accept(this)
+    }
+
     override fun visitBlock(block: RsBlock) {
         block.acceptChildren(this)
     }
