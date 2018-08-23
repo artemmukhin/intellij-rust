@@ -10,7 +10,7 @@ import org.rust.lang.core.psi.*
 import org.rust.lang.core.psi.ext.*
 import org.rust.lang.core.resolve.ImplLookup
 import org.rust.lang.core.resolve.StdKnownItems
-import org.rust.lang.core.types.borrowck.localElement
+import org.rust.lang.core.types.borrowck.resolvedElement
 import org.rust.lang.core.types.builtinDeref
 import org.rust.lang.core.types.infer.Aliasability.FreelyAliasable
 import org.rust.lang.core.types.infer.Aliasability.NonAliasable
@@ -350,7 +350,7 @@ class MemoryCategorizationContext(val infcx: RsInferenceContext) {
 
     // TODO
     fun processDef(element: RsElement, exprType: Ty): Cmt? {
-        val def = element.localElement
+        val def = element.resolvedElement
         val mutbl = ((def as? RsPatBinding)?.kind as? RsBindingModeKind.BindByValue)?.mutability?.isMut ?: false
         return Cmt(element, Local(def), if (mutbl) Declared else MutabilityCategory.Immutable, exprType)
     }

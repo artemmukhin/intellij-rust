@@ -51,7 +51,7 @@ data class LoanPath(val kind: LoanPathKind, val ty: Ty) {
     fun killScope(bccx: BorrowCheckContext): Scope =
         when (kind) {
             is Var -> {
-                val variable = kind.element.localElement
+                val variable = kind.element.resolvedElement
                 if (variable is RsPatBinding) {
                     bccx.regionScopeTree.getVariableScope(variable) ?: Scope.Node(variable)
                 } else {
@@ -104,10 +104,10 @@ data class LoanPath(val kind: LoanPathKind, val ty: Ty) {
 
     companion object {
         fun computeFor(cmt: Cmt): LoanPath? =
-            loanPathIsField(cmt).first
+            computeAndCheckIfField(cmt).first
 
         // TODO: refactor
-        fun loanPathIsField(cmt: Cmt): Pair<LoanPath?, Boolean> {
+        fun computeAndCheckIfField(cmt: Cmt): Pair<LoanPath?, Boolean> {
             fun loanPath(kind: LoanPathKind): LoanPath = LoanPath(kind, cmt.ty)
 
             val category = cmt.category
@@ -116,10 +116,10 @@ data class LoanPath(val kind: LoanPathKind, val ty: Ty) {
 
                 is Categorization.Upvar -> Pair(loanPath(Upvar()), false)
 
-                is Categorization.Local -> Pair(loanPath(Var(cmt.element.localElement, cmt.element)), false)
+                is Categorization.Local -> Pair(loanPath(Var(cmt.element.resolvedElement, cmt.element)), false)
 
                 is Categorization.Deref -> {
-                    val (baseLp, baseIsField) = loanPathIsField(category.cmt)
+                    val (baseLp, baseIsField) = computeAndCheckIfField(category.cmt)
                     if (baseLp != null) {
                         val kind = Extend(baseLp, cmt.mutabilityCategory, Deref(category.pointerKind))
                         Pair(loanPath(kind), baseIsField)
@@ -138,7 +138,7 @@ data class LoanPath(val kind: LoanPathKind, val ty: Ty) {
 
                 is Categorization.Downcast -> {
                     val baseCmt = category.cmt
-                    val (baseLp, baseIsField) = loanPathIsField(baseCmt)
+                    val (baseLp, baseIsField) = computeAndCheckIfField(baseCmt)
                     if (baseLp != null) {
                         val kind = Downcast(baseLp, category.element)
                         Pair(loanPath(kind), baseIsField)
@@ -158,11 +158,7 @@ sealed class LoanPathKind {
         override fun equals(other: Any?): Boolean {
             if (this === other) return true
             if (javaClass != other?.javaClass) return false
-
-            other as Var
-
-            if (element != other.element) return false
-
+            if (element != (other as Var).element) return false
             return true
         }
 
@@ -290,11 +286,11 @@ class BorrowCheckError(
     val code: BorrowCheckErrorCode
 )
 
-val RsElement.localElement: RsElement
+val RsElement.resolvedElement: RsElement
     get() = when (this) {
         is RsNamedElement -> this
         is RsPath -> this.reference.resolve() ?: this
-        is RsPathExpr -> path.localElement
-        is RsPatIdent -> patBinding.localElement
-        else -> (this.reference as? RsElement)?.localElement ?: this
+        is RsPathExpr -> path.resolvedElement
+        is RsPatIdent -> patBinding.resolvedElement
+        else -> (this.reference as? RsElement)?.resolvedElement ?: this
     }

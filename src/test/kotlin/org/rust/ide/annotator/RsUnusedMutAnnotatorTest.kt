@@ -39,4 +39,15 @@ class RsUnusedMutAnnotatorTest : RsAnnotationTestBase() {
         }
     """)
 
+    fun `test unused mut 3`() = checkWarnings("""
+        struct S;
+        impl S {
+            fn test(&mut self) {}
+        }
+        fn main() {
+            let mut x = S;
+            x.test();
+        }
+    """)
+
 }

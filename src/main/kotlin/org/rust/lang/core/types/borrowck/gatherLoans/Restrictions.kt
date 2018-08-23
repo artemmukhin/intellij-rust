@@ -43,7 +43,7 @@ class RestrictionContext(val bccx: BorrowCheckContext, val loanRegion: Region, v
 
             is Categorization.Local -> {
                 val original = category.element
-                val local = original.localElement
+                val local = original.resolvedElement
                 val variable = Var(local, original)
                 SafeIf(loanPath(variable), mutableListOf(loanPath(variable)))
             }

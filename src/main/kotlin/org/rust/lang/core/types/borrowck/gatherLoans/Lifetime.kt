@@ -53,7 +53,7 @@ class GuaranteeLifetimeContext(
             is StaticItem -> ReStatic
             is Upvar -> ReScope(itemScope)
             is Local -> {
-                val variable = category.element.localElement
+                val variable = category.element.resolvedElement
                 if (variable is RsPatBinding) {
                     ReScope(bccx.regionScopeTree.getVariableScope(variable) ?: Scope.Node(variable))
                 } else {
