@@ -306,10 +306,19 @@ class CheckLoanContext(
         return false
     }
 
+    // TODO
     /** Checks whether the restrictions introduced by `loan1` would prohibit `loan2` */
     private fun reportErrorIfLoanConflictsWithRestriction(loan1: Loan, loan2: Loan, oldLoan: Loan, newLoan: Loan): Any? {
-        // TODO
-        return null
+        if (BorrowKind.isCompatible(loan1.kind, loan2.kind)) {
+            return true
+        }
+
+        for (restrictedPath in loan1.restrictedPaths) {
+            if (restrictedPath != loan2.loanPath) continue
+
+            val common = newLoan.loanPath.common(oldLoan.loanPath)
+        }
+        return false
     }
 
     private fun reportIllegalMutation(loanPath: LoanPath, loan: Loan) {

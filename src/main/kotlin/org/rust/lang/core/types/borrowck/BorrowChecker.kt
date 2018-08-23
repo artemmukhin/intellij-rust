@@ -82,6 +82,20 @@ data class LoanPath(val kind: LoanPathKind, val ty: Ty) {
         }
     }
 
+    fun depth(): Int =
+        if (kind is Extend && kind.lpElement is Deref) {
+            kind.loanPath.depth()
+        } else if (kind is Extend && kind.lpElement is Interior) {
+            kind.loanPath.depth() + 1
+        } else {
+            0
+        }
+
+    // TODO
+    fun common(other: LoanPath): LoanPath? {
+        return null
+    }
+
     val containingExpr: RsExpr?
         get() = when (kind) {
             is LoanPathKind.Var -> kind.original?.ancestorOrSelf<RsExpr>()
