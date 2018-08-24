@@ -7,6 +7,7 @@ package org.rust.ide.inspections
 
 import com.intellij.codeInspection.ProblemsHolder
 import org.rust.ide.annotator.fixes.AddMutableFix
+import org.rust.ide.inspections.fixes.MoveFix
 import org.rust.lang.core.psi.*
 import org.rust.lang.core.psi.ext.*
 import org.rust.lang.core.types.borrowCheckResult
@@ -37,7 +38,9 @@ class RsBorrowCheckerInspection : RsLocalInspectionTool() {
                 val borrowCheckResult = func.borrowCheckResult ?: return
 
                 borrowCheckResult.usesOfMovedValue.forEach {
-                    if (it.use != null) registerUseOfMovedValueProblem(holder, it.use)
+                    if (it.use != null && it.exprWithUse != null) {
+                        registerUseOfMovedValueProblem(holder, it.use, it.exprWithUse)
+                    }
                 }
                 borrowCheckResult.moveErrors.forEach {
                     val move = it.from.element.ancestorOrSelf<RsExpr>()
@@ -51,8 +54,9 @@ class RsBorrowCheckerInspection : RsLocalInspectionTool() {
         holder.registerProblem(expr, "Cannot borrow immutable local variable `${nameExpr.text}` as mutable", *fix)
     }
 
-    private fun registerUseOfMovedValueProblem(holder: ProblemsHolder, element: RsElement) {
-        holder.registerProblem(element, "Use of moved value")
+    private fun registerUseOfMovedValueProblem(holder: ProblemsHolder, use: RsElement, exprWithUse: RsElement) {
+        val fix = MoveFix.createIfCompatible(use).let { if (it == null) emptyArray() else arrayOf(it) }
+        holder.registerProblem(exprWithUse, "Use of moved value", *fix)
     }
 
     private fun registerMoveProblem(holder: ProblemsHolder, element: RsElement) {

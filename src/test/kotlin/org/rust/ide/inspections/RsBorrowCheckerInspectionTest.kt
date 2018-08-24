@@ -350,7 +350,7 @@ class RsBorrowCheckerInspectionTest : RsInspectionsTestBase(RsBorrowCheckerInspe
         }
     """, checkWarn = false)
 
-    fun `test borrowck move by call`() = checkByText("""
+    fun `test borrowck move by call`() = checkFixByText("Derive Copy trait", """
         struct S { data: i32 }
 
         fn f(s: S) {}
@@ -362,32 +362,68 @@ class RsBorrowCheckerInspectionTest : RsInspectionsTestBase(RsBorrowCheckerInspe
                 if <error descr="Use of moved value">x.data</error> == 10 { f(<error descr="Use of moved value">x</error>); } else {}
                 i += 1;
             }
-            <error descr="Use of moved value">x</error>;
+            <error descr="Use of moved value">x<caret></error>;
+        }
+    """, """
+        #[derive(Clone, Copy)]
+        struct S { data: i32 }
+
+        fn f(s: S) {}
+
+        fn main() {
+            let x = S { data: 42 };
+            let mut i = 0;
+            while i < 10 {
+                if x.data == 10 { f(x); } else {}
+                i += 1;
+            }
+            x;
         }
     """, checkWarn = false)
 
-    fun `test borrowck move by assign`() = checkByText("""
+    fun `test borrowck move by assign`() = checkFixByText("Derive Copy trait", """
+        #[derive()]
         struct S { data: i32 }
 
         fn main() {
             let x = S { data: 42 };
             let y = x;
-            <error descr="Use of moved value">x</error>;
+            <error descr="Use of moved value">x<caret></error>;
+        }
+    """, """
+        #[derive(Clone, Copy)]
+        struct S { data: i32 }
+
+        fn main() {
+            let x = S { data: 42 };
+            let y = x;
+            x;
         }
     """, checkWarn = false)
 
-    fun `test borrowck move by assign 2`() = checkByText("""
+    fun `test borrowck move by assign 2`() = checkFixByText("Derive Copy trait", """
+        #[derive(PartialOrd, PartialEq)]
         struct S { data: i32 }
 
         fn main() {
             let x = S { data: 42 };
             let mut y = 2;
             y = x;
-            <error descr="Use of moved value">x</error>;
+            <error descr="Use of moved value">x<caret></error>;
+        }
+    """, """
+        #[derive(PartialOrd, PartialEq, Clone, Copy)]
+        struct S { data: i32 }
+
+        fn main() {
+            let x = S { data: 42 };
+            let mut y = 2;
+            y = x;
+            x;
         }
     """, checkWarn = false)
 
-    fun `test borrowck move from raw pointer`() = checkByText("""
+    fun `test borrowck move from raw pointer`() = checkFixIsUnavailable("Derive Copy trait", """
         struct S { data: i32 }
 
         unsafe fn foo(x: *const S) -> S {
@@ -400,7 +436,7 @@ class RsBorrowCheckerInspectionTest : RsInspectionsTestBase(RsBorrowCheckerInspe
         }
     """, checkWarn = false)
 
-    fun `test borrowck move from array`() = checkByText("""
+    fun `test borrowck move from array`() = checkFixIsUnavailable("Derive Copy trait", """
         struct S { data: i32 }
 
         fn main() {

@@ -38,11 +38,18 @@ data class LoanPath(val kind: LoanPathKind, val ty: Ty) {
             is Extend -> kind.loanPath.killScope(bccx)
         }
 
+    val element: RsElement?
+        get() = when (kind) {
+            is LoanPathKind.Var -> kind.original
+            is LoanPathKind.Downcast -> kind.element
+            is LoanPathKind.Extend -> (kind.loanPath.kind as? LoanPathKind.Var)?.original
+        }
+
     val containingExpr: RsExpr?
         get() = when (kind) {
-            is LoanPathKind.Var -> kind.original?.ancestorOrSelf<RsExpr>()
-            is LoanPathKind.Downcast -> kind.element.ancestorOrSelf<RsExpr>()
-            is LoanPathKind.Extend -> (kind.loanPath.kind as? LoanPathKind.Var)?.original?.parent?.ancestorOrSelf<RsExpr>()
+            is LoanPathKind.Var -> element?.ancestorOrSelf()
+            is LoanPathKind.Downcast -> element?.ancestorOrSelf()
+            is LoanPathKind.Extend -> element?.parent?.ancestorOrSelf<RsExpr>()
         }
 
     companion object {
@@ -106,7 +113,7 @@ class BorrowCheckResult(
     val moveErrors: MutableList<MoveError>
 )
 
-class UseOfMovedValueError(val use: RsElement?, val move: RsElement?)
+class UseOfMovedValueError(val use: RsElement?, val exprWithUse: RsElement?, val move: RsElement?)
 
 class BorrowCheckContext(
     val regionScopeTree: ScopeTree,
@@ -117,7 +124,7 @@ class BorrowCheckContext(
     val moveErrors: MutableList<MoveError> = mutableListOf()
 ) {
     fun reportUseOfMovedValue(loanPath: LoanPath, move: Move) {
-        usesOfMovedValue.add(UseOfMovedValueError(loanPath.containingExpr, move.element.ancestorOrSelf<RsStmt>()))
+        usesOfMovedValue.add(UseOfMovedValueError(loanPath.element, loanPath.containingExpr, move.element.ancestorOrSelf<RsStmt>()))
     }
 }
 
