@@ -34,7 +34,6 @@ data class LoanPath(val kind: LoanPathKind, val ty: Ty) {
                     Scope.Node(variable)
                 }
             }
-            is Upvar -> TODO("not implemented")
             is Downcast -> kind.loanPath.killScope(bccx)
             is Extend -> kind.loanPath.killScope(bccx)
         }
@@ -42,7 +41,6 @@ data class LoanPath(val kind: LoanPathKind, val ty: Ty) {
     val containingExpr: RsExpr?
         get() = when (kind) {
             is LoanPathKind.Var -> kind.original?.ancestorOrSelf<RsExpr>()
-            is LoanPathKind.Upvar -> null
             is LoanPathKind.Downcast -> kind.element.ancestorOrSelf<RsExpr>()
             is LoanPathKind.Extend -> (kind.loanPath.kind as? LoanPathKind.Var)?.original?.parent?.ancestorOrSelf<RsExpr>()
         }
@@ -54,8 +52,6 @@ data class LoanPath(val kind: LoanPathKind, val ty: Ty) {
             val category = cmt.category
             return when (category) {
                 is Categorization.Rvalue, Categorization.StaticItem -> null
-
-                is Categorization.Upvar -> loanPath(Upvar())
 
                 is Categorization.Local -> loanPath(Var(cmt.element.resolvedElement, cmt.element))
 
@@ -96,8 +92,6 @@ sealed class LoanPathKind {
             return element.hashCode()
         }
     }
-
-    class Upvar : LoanPathKind()
     data class Downcast(val loanPath: LoanPath, val element: RsElement) : LoanPathKind()
     data class Extend(val loanPath: LoanPath, val mutCategory: MutabilityCategory, val lpElement: LoanPathElement) : LoanPathKind()
 }

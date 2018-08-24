@@ -70,7 +70,7 @@ class GatherMoveContext(val bccx: BorrowCheckContext) {
     private fun checkAndGetIllegalMoveOrigin(cmt: Cmt): Cmt? {
         val category = cmt.category
         return when (category) {
-            is Categorization.Rvalue, is Categorization.Local, is Categorization.Upvar -> null
+            is Categorization.Rvalue, is Categorization.Local -> null
 
             is Categorization.StaticItem, is Categorization.Deref -> cmt
 

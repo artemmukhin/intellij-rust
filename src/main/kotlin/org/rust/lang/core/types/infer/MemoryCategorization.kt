@@ -41,9 +41,6 @@ sealed class Categorization {
     /** Static value */
     object StaticItem : Categorization()
 
-    /** Variable captured by closure */
-    class Upvar : Categorization()
-
     /** Local variable */
     data class Local(val element: RsElement) : Categorization()
 
@@ -171,7 +168,6 @@ class Cmt(
                     when (baseCmt.category) {
                         is Local -> LocalDeref(baseCmt.category.element)
                         is Interior -> AdtFieldDeref
-                        is Upvar -> ClosureEnv
                         else -> null
                     }
                 } else if (pointerKind is UnsafePointer) {

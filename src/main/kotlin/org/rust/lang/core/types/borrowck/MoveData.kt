@@ -111,7 +111,7 @@ class MoveData(
         // Kill all moves related to a variable `x` when it goes out of scope
         paths.forEach { path ->
             val kind = path.loanPath.kind
-            if (kind is Var || kind is Upvar || kind is Downcast) {
+            if (kind is Var || kind is Downcast) {
                 val killScope = path.loanPath.killScope(bccx)
                 val movePath = pathMap[path.loanPath] ?: return
                 killMoves(movePath, killScope.element, ScopeEnd, dfcxMoves)
@@ -121,7 +121,7 @@ class MoveData(
         // Kill all assignments when the variable goes out of scope
         varAssignments.forEachIndexed { i, assignment ->
             val lp = assignment.path.loanPath
-            if (lp.kind is Var || lp.kind is Upvar || lp.kind is Downcast) {
+            if (lp.kind is Var || lp.kind is Downcast) {
                 val killScope = lp.killScope(bccx)
                 dfcxAssign.addKill(ScopeEnd, killScope.element, i)
             }
@@ -137,7 +137,7 @@ class MoveData(
 
         val kind = loanPath.kind
         val oldSize = when (kind) {
-            is Var, is Upvar -> {
+            is Var -> {
                 val index = paths.size
                 paths.add(MovePath(loanPath))
                 index
@@ -385,7 +385,7 @@ class Assignment(
 
 val LoanPath.isPrecise: Boolean
     get() = when (kind) {
-        is Var, is Upvar -> true
+        is Var -> true
         is Extend -> if (kind.lpElement is Interior) false else kind.loanPath.isPrecise
         is Downcast -> kind.loanPath.isPrecise
     }
