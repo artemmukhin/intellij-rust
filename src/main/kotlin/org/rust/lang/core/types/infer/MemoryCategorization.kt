@@ -19,7 +19,7 @@ import org.rust.lang.core.types.infer.BorrowKind.ImmutableBorrow
 import org.rust.lang.core.types.infer.BorrowKind.MutableBorrow
 import org.rust.lang.core.types.infer.Categorization.*
 import org.rust.lang.core.types.infer.ImmutabilityBlame.*
-import org.rust.lang.core.types.infer.InteriorKind.InteriorField
+import org.rust.lang.core.types.infer.InteriorKind.*
 import org.rust.lang.core.types.infer.MutabilityCategory.Declared
 import org.rust.lang.core.types.infer.PointerKind.BorrowedPointer
 import org.rust.lang.core.types.infer.PointerKind.UnsafePointer
@@ -42,7 +42,7 @@ sealed class Categorization {
     object StaticItem : Categorization()
 
     /** Variable captured by closure */
-    object Upvar : Categorization()
+    class Upvar : Categorization()
 
     /** Local variable */
     data class Local(val element: RsElement) : Categorization()
@@ -78,6 +78,7 @@ sealed class PointerKind {
     data class UnsafePointer(val mutability: Mutability) : PointerKind()
 }
 
+/** "interior" means "something reachable from the base without a pointer dereference" */
 sealed class InteriorKind {
     class InteriorField(val fieldName: String?) : InteriorKind()    // e.g. `s.field`
     object InteriorIndex : InteriorKind()                           // e.g. `arr[0]`
@@ -85,10 +86,10 @@ sealed class InteriorKind {
 }
 
 sealed class ImmutabilityBlame {
-    class ImmutableLocal(val element: RsElement) : ImmutabilityBlame()
-    object ClosureEnv : ImmutabilityBlame()
-    class LocalDeref(val element: RsElement) : ImmutabilityBlame()
-    object AdtFieldDeref : ImmutabilityBlame()
+    class ImmutableLocal(val element: RsElement) : ImmutabilityBlame()  // immutable as immutable variable
+    object ClosureEnv : ImmutabilityBlame()                             // immutable as dereference of upvar
+    class LocalDeref(val element: RsElement) : ImmutabilityBlame()      // immutable as dereference of immutable variable
+    object AdtFieldDeref : ImmutabilityBlame()                          // immutable as interior of immutable
 }
 
 sealed class Aliasability {
@@ -149,6 +150,7 @@ enum class MutabilityCategory {
  * is the address of the place.  If Expr is an rvalue, this is the address of
  * some temporary spot in memory where the result is stored.
  *
+ * [element]: Expr
  * [category]: kind of Expr
  * [mutabilityCategory]: mutability of Address(Expr)
  * [ty]: the type of data found at Address(Expr)
@@ -162,6 +164,7 @@ class Cmt(
     val immutabilityBlame: ImmutabilityBlame? =
         when (category) {
             is Deref -> {
+                // try to figure out where the immutable reference came from
                 val pointerKind = category.pointerKind
                 val baseCmt = category.cmt
                 if (pointerKind is BorrowedPointer && pointerKind.borrowKind is ImmutableBorrow) {
@@ -258,7 +261,7 @@ class MemoryCategorizationContext(val infcx: RsInferenceContext) {
         val type = indexExpr.type
         val base = indexExpr.containerExpr ?: return Cmt(indexExpr, ty = type)
         val baseCmt = processExpr(base)
-        return Cmt(indexExpr, Interior(baseCmt, InteriorKind.InteriorIndex), baseCmt.mutabilityCategory.inherit(), type)
+        return Cmt(indexExpr, Interior(baseCmt, InteriorIndex), baseCmt.mutabilityCategory.inherit(), type)
     }
 
     fun processPathExpr(pathExpr: RsPathExpr): Cmt {
@@ -366,17 +369,14 @@ class MemoryCategorizationContext(val infcx: RsInferenceContext) {
     private fun cmtOfSliceElement(element: RsElement, baseCmt: Cmt): Cmt =
         Cmt(
             element,
-            Interior(baseCmt, InteriorKind.InteriorPattern),
+            Interior(baseCmt, InteriorPattern),
             baseCmt.mutabilityCategory.inherit(),
             baseCmt.ty
         )
 
     fun isTypeMovesByDefault(ty: Ty): Boolean =
         when (ty) {
-            is TyUnknown -> false
-            is TyPrimitive, is TyTuple -> false
-            is TyReference, is TyPointer -> false
-            is TyFunction -> false
+            is TyUnknown, is TyPrimitive, is TyTuple, is TyReference, is TyPointer, is TyFunction -> false
             else -> infcx.lookup.isCopy(ty).not()
         }
 }
