@@ -93,7 +93,52 @@ data class LoanPath(val kind: LoanPathKind, val ty: Ty) {
 
     // TODO
     fun common(other: LoanPath): LoanPath? {
-        return null
+        val thisKind = this.kind
+        val otherKind = other.kind
+        return when {
+            thisKind is Extend && thisKind.lpElement is Interior &&
+                otherKind is Extend && otherKind.lpElement is Interior -> {
+                val thisElement = thisKind.lpElement.element
+                val otherElement = otherKind.lpElement.element
+                val thisInteriorKind = thisKind.lpElement.kind
+                val otherInteriorKind = otherKind.lpElement.kind
+                val thisLoanPath = thisKind.loanPath
+                val otherLoanPath = otherKind.loanPath
+
+                if (thisInteriorKind == otherInteriorKind && thisElement == otherElement) {
+                    val baseCommon = thisLoanPath.common(otherLoanPath) ?: return null
+                    val depth = baseCommon.depth()
+                    if (thisLoanPath.depth() == depth && otherLoanPath.depth() == depth) {
+                        LoanPath(Extend(baseCommon, thisKind.mutCategory, Interior(thisElement, thisInteriorKind)), this.ty)
+                    } else {
+                        baseCommon
+                    }
+                } else {
+                    thisLoanPath.common(otherLoanPath)
+                }
+            }
+
+            thisKind is Extend && thisKind.lpElement is Deref -> {
+                thisKind.loanPath.common(other)
+            }
+
+            otherKind is Extend && otherKind.lpElement is Deref -> {
+                this.common(otherKind.loanPath)
+            }
+
+            thisKind is Var && otherKind is Var -> {
+                val thisElement = thisKind.element
+                val otherElement = otherKind.element
+                if (thisElement == otherElement) {
+                    LoanPath(Var(thisElement), this.ty)
+                } else null
+            }
+
+            // TODO: Upvar
+            thisKind is Upvar && otherKind is Upvar -> null
+
+            else -> null
+        }
     }
 
     val containingExpr: RsExpr?

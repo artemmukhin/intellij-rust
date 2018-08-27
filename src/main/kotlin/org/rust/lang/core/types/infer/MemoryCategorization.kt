@@ -79,9 +79,9 @@ sealed class PointerKind {
 }
 
 sealed class InteriorKind {
-    class InteriorField(val fieldName: String?) : InteriorKind()    // e.g. `s.field`
-    object InteriorIndex : InteriorKind()                           // e.g. `arr[0]`
-    object InteriorPattern : InteriorKind()                         // e.g. `fn foo([_, a, _, _]: [A; 4]) { ... }`
+    data class InteriorField(val fieldName: String?) : InteriorKind()   // e.g. `s.field`
+    object InteriorIndex : InteriorKind()                               // e.g. `arr[0]`
+    object InteriorPattern : InteriorKind()                             // e.g. `fn foo([_, a, _, _]: [A; 4]) { ... }`
 }
 
 sealed class ImmutabilityBlame {
