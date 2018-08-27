@@ -130,7 +130,7 @@ data class LoanPath(val kind: LoanPathKind, val ty: Ty) {
                 val thisElement = thisKind.element
                 val otherElement = otherKind.element
                 if (thisElement == otherElement) {
-                    LoanPath(Var(thisElement), this.ty)
+                    LoanPath(Var(thisElement, thisKind.original), this.ty)
                 } else null
             }
 
@@ -175,7 +175,7 @@ data class LoanPath(val kind: LoanPathKind, val ty: Ty) {
 
                 is Categorization.Upvar -> Pair(loanPath(Upvar()), false)
 
-                is Categorization.Local -> Pair(loanPath(Var(cmt.element.resolvedElement, cmt.element)), false)
+                is Categorization.Local -> Pair(loanPath(Var(cmt.element.resolvedElement, category.original)), false)
 
                 is Categorization.Deref -> {
                     val (baseLp, baseIsField) = computeAndCheckIfField(category.cmt)

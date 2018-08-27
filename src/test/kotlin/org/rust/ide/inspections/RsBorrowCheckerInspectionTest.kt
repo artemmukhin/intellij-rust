@@ -504,7 +504,7 @@ class RsBorrowCheckerInspectionTest : RsInspectionsTestBase(RsBorrowCheckerInspe
         fn main() {
             let mut x: S = S { data: 42 };
             let y = &mut x;
-            x;
+            let z = &x;
         }
     """, checkWarn = false)
 
@@ -512,12 +512,28 @@ class RsBorrowCheckerInspectionTest : RsInspectionsTestBase(RsBorrowCheckerInspe
     fun `test borrowck borrow vec`() = checkByText("""
         struct S { data: i32 }
 
+        fn push42(vec: &mut Vec<S>) {
+            vec.push(S { data: 42 });
+        }
+
         fn main() {
             let mut vec = Vec::new();
-            vec.push(S { data: 1});
+            push42(&mut vec);
             let x = &vec[0];
-            vec.clear();
-            let y = x.data;
+            push42(&mut vec);
+        }
+    """, checkWarn = false)
+
+    fun `test borrowck borrow box`() = checkByText("""
+        struct S { num: i32 }
+        struct Box { data: S }
+
+        fn clear(b: &mut Box) { b.data.num = 0; }
+
+        fn main() {
+            let mut b = Box { data: S { num: 1 } };
+            let s = &b.data;
+            clear(&mut b);
         }
     """, checkWarn = false)
 }

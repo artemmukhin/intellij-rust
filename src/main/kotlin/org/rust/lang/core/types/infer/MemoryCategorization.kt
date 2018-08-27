@@ -45,7 +45,7 @@ sealed class Categorization {
     object Upvar : Categorization()
 
     /** Local variable */
-    data class Local(val element: RsElement) : Categorization()
+    data class Local(val element: RsElement, val original: RsElement) : Categorization()
 
     /** Dereference of a pointer */
     data class Deref(val cmt: Cmt, val pointerKind: PointerKind) : Categorization()
@@ -275,9 +275,9 @@ class MemoryCategorizationContext(val infcx: RsInferenceContext) {
 
             is RsEnumVariant, is RsStructItem, is RsFunction -> processRvalue(pathExpr)
 
-            is RsPatBinding -> Cmt(pathExpr, Local(declaration), MutabilityCategory.from(declaration.mutability), type)
+            is RsPatBinding -> Cmt(pathExpr, Local(declaration, pathExpr), MutabilityCategory.from(declaration.mutability), type)
 
-            is RsSelfParameter -> Cmt(pathExpr, Local(declaration), MutabilityCategory.from(declaration.mutability), type)
+            is RsSelfParameter -> Cmt(pathExpr, Local(declaration, pathExpr), MutabilityCategory.from(declaration.mutability), type)
 
             else -> Cmt(pathExpr, ty = type)
         }
@@ -352,7 +352,7 @@ class MemoryCategorizationContext(val infcx: RsInferenceContext) {
     fun processDef(element: RsElement, exprType: Ty): Cmt? {
         val def = element.resolvedElement
         val mutbl = ((def as? RsPatBinding)?.kind as? RsBindingModeKind.BindByValue)?.mutability?.isMut ?: false
-        return Cmt(element, Local(def), if (mutbl) Declared else MutabilityCategory.Immutable, exprType)
+        return Cmt(element, Local(def, element), if (mutbl) Declared else MutabilityCategory.Immutable, exprType)
     }
 
     private fun cmtOfField(element: RsElement, baseCmt: Cmt, fieldName: String?, fieldType: Ty): Cmt =

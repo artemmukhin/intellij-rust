@@ -79,12 +79,11 @@ class CheckLoanContext(
 
         for ((i, newLoanIndex) in newLoanIndices.withIndex()) {
             val oldLoan = allLoans[newLoanIndex]
-            for (index in newLoanIndices.drop(i)) {
+            for (index in newLoanIndices.drop(i + 1)) {
                 val newLoan = allLoans[index]
                 reportErrorIfLoansConflict(oldLoan, newLoan)
             }
         }
-
     }
 
     /**
@@ -292,12 +291,33 @@ class CheckLoanContext(
         val errorNewOld = reportErrorIfLoanConflictsWithRestriction(newLoan, oldLoan, oldLoan, newLoan)
 
         // TODO
-        if (errorOldNew != null && errorNewOld != null) {
+        if (errorOldNew && errorNewOld) {
+            println("Loans conflict: old & new")
+            val oldKind = oldLoan.loanPath.kind
+            if (oldKind is Var) {
+                println(oldKind.original?.text)
+            } else if (oldKind is Extend && oldKind.loanPath.kind is Var) {
+                println(oldKind.loanPath.kind.original?.text)
+            }
             // errorOldNew.error.emit()
             // errorNewOld.error.cancel()
-        } else if (errorOldNew != null) {
+        } else if (errorOldNew) {
+            println("Loans conflict: old")
+            val oldKind = oldLoan.loanPath.kind
+            if (oldKind is Var) {
+                println(oldKind.original?.text)
+            } else if (oldKind is Extend && oldKind.loanPath.kind is Var) {
+                println(oldKind.loanPath.kind.original?.text)
+            }
             // errorOldNew.error.emit()
-        } else if (errorNewOld != null) {
+        } else if (errorNewOld) {
+            println("Loans conflict: new")
+            val newKind = newLoan.loanPath.kind
+            if (newKind is Var) {
+                println(newKind.original?.text)
+            } else if (newKind is Extend && newKind.loanPath.kind is Var) {
+                println(newKind.loanPath.kind.original?.text)
+            }
             // errorNewOld.error.emit()
         } else {
             return true
@@ -308,15 +328,22 @@ class CheckLoanContext(
 
     // TODO
     /** Checks whether the restrictions introduced by `loan1` would prohibit `loan2` */
-    private fun reportErrorIfLoanConflictsWithRestriction(loan1: Loan, loan2: Loan, oldLoan: Loan, newLoan: Loan): Any? {
+    private fun reportErrorIfLoanConflictsWithRestriction(loan1: Loan, loan2: Loan, oldLoan: Loan, newLoan: Loan): Boolean {
         if (BorrowKind.isCompatible(loan1.kind, loan2.kind)) {
-            return true
+            return false
         }
 
         for (restrictedPath in loan1.restrictedPaths) {
             if (restrictedPath != loan2.loanPath) continue
 
             val common = newLoan.loanPath.common(oldLoan.loanPath)
+            if (newLoan.loanPath.hasFork(oldLoan.loanPath) && common != null) {
+                return true
+                // report?
+            } else {
+                return true
+                // report?
+            }
         }
         return false
     }
