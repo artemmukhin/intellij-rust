@@ -207,7 +207,7 @@ class ExprUseWalker(
                     selectFromExpr(base)
                 } else if (methodCall != null) {
                     val selfParameter = (methodCall.reference.resolve() as? RsFunction)?.selfParameter
-                    if (selfParameter != null && base.type !is TyReference) {
+                    if (selfParameter != null && base.type !is TyReference && selfParameter.isRef) {
                         val borrowKind = BorrowKind.from(selfParameter.mutability)
                         borrowExpr(base, ReScope(Scope.Node(expr)), borrowKind, AutoRef)
                     }

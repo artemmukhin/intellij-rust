@@ -161,7 +161,8 @@ data class ScopeTree(
         } else {
             // The lifetime was defined on node that doesn't own a body, which in practice can only mean a trait or an
             // impl, that is the parent of a method, and that is enforced below.
-            check(parameterOwner == rootParent)
+            // TODO
+            //check(parameterOwner == rootParent)
 
             // The trait/impl lifetime is in scope for the method's body.
             rootBody
