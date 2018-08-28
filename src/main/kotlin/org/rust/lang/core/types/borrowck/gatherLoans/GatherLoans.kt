@@ -13,12 +13,13 @@ import org.rust.lang.core.psi.ext.RsElement
 import org.rust.lang.core.types.borrowck.*
 import org.rust.lang.core.types.infer.Cmt
 import org.rust.lang.core.types.infer.MemoryCategorizationContext
+import org.rust.lang.core.types.inference
 import org.rust.lang.core.types.ty.TyUnknown
 import org.rust.lang.core.types.type
 
 fun gatherLoansInFn(bccx: BorrowCheckContext): MoveData {
     val glcx = GatherLoanContext(bccx, MoveData())
-    val visitor = ExprUseWalker(glcx, MemoryCategorizationContext(bccx.implLookup.ctx))
+    val visitor = ExprUseWalker(glcx, MemoryCategorizationContext(bccx.implLookup, bccx.owner.inference))
     visitor.consumeBody(bccx.body)
     return glcx.moveData
 }

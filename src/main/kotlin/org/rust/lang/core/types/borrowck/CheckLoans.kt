@@ -14,6 +14,7 @@ import org.rust.lang.core.types.borrowck.gatherLoans.hasDestructor
 import org.rust.lang.core.types.infer.Cmt
 import org.rust.lang.core.types.infer.InteriorKind
 import org.rust.lang.core.types.infer.MemoryCategorizationContext
+import org.rust.lang.core.types.inference
 import org.rust.lang.core.types.ty.TyAdt
 
 fun checkLoans(
@@ -22,7 +23,7 @@ fun checkLoans(
     body: RsBlock
 ) {
     val clcx = CheckLoanContext(bccx, moveData)
-    val visitor = ExprUseWalker(clcx, MemoryCategorizationContext(bccx.implLookup.ctx))
+    val visitor = ExprUseWalker(clcx, MemoryCategorizationContext(bccx.implLookup, bccx.owner.inference))
     visitor.consumeBody(body)
 }
 
