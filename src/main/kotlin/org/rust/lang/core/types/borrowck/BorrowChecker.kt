@@ -25,6 +25,7 @@ import org.rust.lang.core.types.regions.Scope
 import org.rust.lang.core.types.regions.ScopeTree
 import org.rust.lang.core.types.regions.getRegionScopeTree
 import org.rust.lang.core.types.ty.Ty
+import java.util.*
 
 
 class AnalysisData(val moveData: FlowedMoveData)
@@ -48,7 +49,7 @@ data class LoanPath(val kind: LoanPathKind, val ty: Ty) {
         get() = when (kind) {
             is LoanPathKind.Var -> kind.use
             is LoanPathKind.Downcast -> kind.element
-            is LoanPathKind.Extend -> (kind.loanPath.kind as? LoanPathKind.Var)?.use
+            is LoanPathKind.Extend -> kind.loanPath.element
         }
 
     val containingExpr: RsExpr?
@@ -93,17 +94,12 @@ data class LoanPath(val kind: LoanPathKind, val ty: Ty) {
 }
 
 sealed class LoanPathKind {
-    class Var(val declaration: RsElement, val use: RsElement = declaration) : LoanPathKind() {
-        override fun equals(other: Any?): Boolean {
-            if (this === other) return true
-            if (javaClass != other?.javaClass) return false
-            if (declaration != (other as Var).declaration) return false
-            return true
-        }
+    data class Var(val declaration: RsElement, val use: RsElement = declaration) : LoanPathKind() {
+        override fun equals(other: Any?): Boolean =
+            Objects.equals(this.declaration, (other as? Var)?.declaration)
 
-        override fun hashCode(): Int {
-            return declaration.hashCode()
-        }
+        override fun hashCode(): Int =
+            declaration.hashCode()
     }
     data class Downcast(val loanPath: LoanPath, val element: RsElement) : LoanPathKind()
     data class Extend(val loanPath: LoanPath, val mutCategory: MutabilityCategory, val lpElement: LoanPathElement) : LoanPathKind()
