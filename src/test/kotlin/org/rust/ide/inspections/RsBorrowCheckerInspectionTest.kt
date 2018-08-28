@@ -546,6 +546,19 @@ class RsBorrowCheckerInspectionTest : RsInspectionsTestBase(RsBorrowCheckerInspe
         }
     """, checkWarn = false)
 
+    // TODO: false-positive (regions of TyReference needed)
+    fun `test borrowck two calls mut`() = checkByText("""
+        struct S;
+
+        fn f(s: &mut S) {}
+
+        fn main() {
+            let mut s = S;
+            f(&mut s);
+            f(&mut <error descr="Loan conflict">s</error>);
+        }
+    """, checkWarn = false)
+
     fun `test borrowck dangling`() = checkByText("""
         struct S { data: i32 }
 
