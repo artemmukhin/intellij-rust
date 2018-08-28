@@ -137,7 +137,21 @@ class ExprUseWalker(
     val mc: MemoryCategorizationContext
 ) {
     fun consumeBody(body: RsBlock) {
+        fun walkSelfParameter(selfParameter: RsSelfParameter) {
+            val type = selfParameter.typeReference?.type as? TyReference ?: return
+            val mutability = selfParameter.mutability
+
+            val mutabilityCategory = MutabilityCategory.from(mutability)
+            val cmt = Cmt(selfParameter, Categorization.Local(selfParameter, selfParameter), mutabilityCategory, type)
+
+            if (selfParameter.isRef) {
+                delegate.borrow(selfParameter, cmt, type.region, BorrowKind.from(mutability), RefBinding)
+            }
+        }
+
         val function = body.parent as? RsFunction ?: return
+
+        function.selfParameter?.let { walkSelfParameter(it) }
 
         for (parameter in function.valueParameters) {
             val parameterType = parameter.typeReference?.type ?: continue

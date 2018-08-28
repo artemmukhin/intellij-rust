@@ -524,6 +524,17 @@ class RsBorrowCheckerInspectionTest : RsInspectionsTestBase(RsBorrowCheckerInspe
         }
     """, checkWarn = false)
 
+    fun `test borrowck borrow vec 2`() = checkByText("""
+        struct S { data: i32 }
+
+        fn main() {
+            let mut vec = Vec::new();
+            vec.push(S { data: 1 });
+            let x = &vec[0];
+            vec.push(S { data: 2 });
+        }
+    """, checkWarn = false)
+
     fun `test borrowck borrow box`() = checkByText("""
         struct S { num: i32 }
         struct Box { data: S }
