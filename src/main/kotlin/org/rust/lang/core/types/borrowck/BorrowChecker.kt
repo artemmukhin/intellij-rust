@@ -6,8 +6,14 @@
 package org.rust.lang.core.types.borrowck
 
 import org.rust.lang.core.cfg.ControlFlowGraph
-import org.rust.lang.core.psi.*
-import org.rust.lang.core.psi.ext.*
+import org.rust.lang.core.psi.RsBlock
+import org.rust.lang.core.psi.RsExpr
+import org.rust.lang.core.psi.RsPatBinding
+import org.rust.lang.core.psi.RsStmt
+import org.rust.lang.core.psi.ext.RsElement
+import org.rust.lang.core.psi.ext.RsInferenceContextOwner
+import org.rust.lang.core.psi.ext.ancestorOrSelf
+import org.rust.lang.core.psi.ext.body
 import org.rust.lang.core.resolve.ImplLookup
 import org.rust.lang.core.types.borrowck.LoanPathElement.Deref
 import org.rust.lang.core.types.borrowck.LoanPathElement.Interior
@@ -148,12 +154,3 @@ fun buildBorrowCheckerData(bccx: BorrowCheckContext): AnalysisData? {
     val flowedMoves = FlowedMoveData(moveData, bccx, cfg, bccx.body)
     return AnalysisData(flowedMoves)
 }
-
-val RsElement.resolvedElement: RsElement
-    get() = when (this) {
-        is RsNamedElement -> this
-        is RsPath -> this.reference.resolve() ?: this
-        is RsPathExpr -> path.resolvedElement
-        is RsPatIdent -> patBinding.resolvedElement
-        else -> (this.reference as? RsElement)?.resolvedElement ?: this
-    }

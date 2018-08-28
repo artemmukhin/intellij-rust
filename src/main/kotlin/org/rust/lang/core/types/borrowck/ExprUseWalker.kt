@@ -15,10 +15,7 @@ import org.rust.lang.core.types.borrowck.MatchMode.CopyingMatch
 import org.rust.lang.core.types.borrowck.MatchMode.NonBindingMatch
 import org.rust.lang.core.types.borrowck.MoveReason.DirectRefMove
 import org.rust.lang.core.types.borrowck.MoveReason.PatBindingMove
-import org.rust.lang.core.types.infer.Categorization
-import org.rust.lang.core.types.infer.Cmt
-import org.rust.lang.core.types.infer.InteriorKind
-import org.rust.lang.core.types.infer.MemoryCategorizationContext
+import org.rust.lang.core.types.infer.*
 import org.rust.lang.core.types.regions.ReScope
 import org.rust.lang.core.types.regions.Scope
 import org.rust.lang.core.types.ty.TyAdt
@@ -90,7 +87,7 @@ sealed class TrackMatchMode {
             is Conflicting -> MatchMode.MovingMatch
         }
 
-    fun lub(mode: MatchMode): TrackMatchMode =
+    fun leastUpperBound(mode: MatchMode): TrackMatchMode =
         when {
             this is Unknown -> Definite(mode)
             this is Definite && this.mode == mode -> this
@@ -154,8 +151,6 @@ class ExprUseWalker(
         walkExpr(expr)
 
     private fun walkExpr(expr: RsExpr) {
-        walkAdjustment(expr)
-
         when (expr) {
             is RsUnaryExpr -> {
                 val base = expr.expr ?: return
@@ -241,8 +236,6 @@ class ExprUseWalker(
             is RsRetExpr -> expr.expr?.let { consumeExpr(it) }
 
             is RsCastExpr -> consumeExpr(expr.expr)
-
-            is RsLambdaExpr -> walkCaptures(expr)
         }
     }
 
@@ -302,10 +295,6 @@ class ExprUseWalker(
         walkExpr(withExpr)
     }
 
-    private fun walkAdjustment(expr: RsExpr) {
-        // TODO: overloaded deref support needed
-    }
-
     private fun armMoveMode(discriminantCmt: Cmt, arm: RsMatchArm): TrackMatchMode {
         var mode: TrackMatchMode = TrackMatchMode.Unknown
         arm.patList.forEach { mode = determinePatMoveMode(discriminantCmt, it, mode) }
@@ -329,8 +318,8 @@ class ExprUseWalker(
         mc.walkPat(discriminantCmt, pat) { patCmt, pat ->
             if (pat is RsPatIdent && pat.patBinding.reference.resolve() !is RsEnumVariant) {
                 newMode = when (pat.patBinding.kind) {
-                    is BindByReference -> newMode.lub(MatchMode.BorrowingMatch)
-                    is BindByValue -> newMode.lub(copyOrMove(mc, patCmt, PatBindingMove).matchMode)
+                    is BindByReference -> newMode.leastUpperBound(MatchMode.BorrowingMatch)
+                    is BindByValue -> newMode.leastUpperBound(copyOrMove(mc, patCmt, PatBindingMove).matchMode)
                 }
             }
         }
@@ -345,24 +334,20 @@ class ExprUseWalker(
     private fun walkPat(discriminantCmt: Cmt, pat: RsPat, matchMode: MatchMode) {
         mc.walkPat(discriminantCmt, pat) { patCmt, pat ->
             if (pat is RsPatIdent && pat.patBinding.reference.resolve() !is RsEnumVariant) {
-                val patType = pat.patBinding.type
-                val bindingCmt = mc.processDef(pat, patType)
+                val binding = pat.patBinding
+                val mutabilityCategory = MutabilityCategory.from(binding.mutability)
+                val bindingCmt = Cmt(binding, Categorization.Local(binding), mutabilityCategory, binding.type)
+
                 // Each match binding is effectively an assignment to the binding being produced.
-                if (bindingCmt != null) {
-                    delegate.mutate(pat, bindingCmt, MutateMode.Init)
-                }
+                delegate.mutate(pat, bindingCmt, MutateMode.Init)
 
                 // It is also a borrow or copy/move of the value being matched.
-                val kind = pat.patBinding.kind
-                if (kind is BindByValue) {
+                if (binding.kind is BindByValue) {
                     delegate.consumePat(pat, patCmt, copyOrMove(mc, patCmt, PatBindingMove))
                 }
             }
         }
     }
-
-    // TODO: closures support needed
-    private fun walkCaptures(closureExpr: RsExpr) {}
 }
 
 fun copyOrMove(mc: MemoryCategorizationContext, cmt: Cmt, moveReason: MoveReason): ConsumeMode =
