@@ -77,22 +77,39 @@ sealed class PointerKind {
 
 /** "interior" means "something reachable from the base without a pointer dereference" */
 sealed class InteriorKind {
-    class InteriorField(val fieldName: String?) : InteriorKind()    // e.g. `s.field`
-    object InteriorIndex : InteriorKind()                           // e.g. `arr[0]`
-    object InteriorPattern : InteriorKind()                         // e.g. `fn foo([_, a, _, _]: [A; 4]) { ... }`
+    /** e.g. `s.field` */
+    class InteriorField(val fieldName: String?) : InteriorKind()
+
+    /** e.g. `arr[0]` */
+    object InteriorIndex : InteriorKind()
+
+    /** e.g. `fn foo([_, a, _, _]: [A; 4]) { ... }` */
+    object InteriorPattern : InteriorKind()
 }
 
+/** Reason why something is immutable */
 sealed class ImmutabilityBlame {
-    class ImmutableLocal(val element: RsElement) : ImmutabilityBlame()  // immutable as immutable variable
-    object ClosureEnv : ImmutabilityBlame()                             // immutable as dereference of upvar
-    class LocalDeref(val element: RsElement) : ImmutabilityBlame()      // immutable as dereference of immutable variable
-    object AdtFieldDeref : ImmutabilityBlame()                          // immutable as interior of immutable
+    /** immutable as immutable variable */
+    class LocalDeref(val element: RsElement) : ImmutabilityBlame()
+
+    /** immutable as dereference of immutable variable */
+    object AdtFieldDeref : ImmutabilityBlame()
+
+    /** immutable as interior of immutable */
+    class ImmutableLocal(val element: RsElement) : ImmutabilityBlame()
 }
 
+/**
+ * Borrow checker have to never permit &mut-borrows of aliasable data.
+ * "Rules" of aliasability:
+ * - Local variables are never aliasable as they are accessible only within the stack frame;
+ * - Owned content is aliasable if it is found in an aliasable location;
+ * - `&T` is aliasable, and hence can only be borrowed immutably;
+ * - `&mut T` is aliasable if `T` is aliasable
+ */
 sealed class Aliasability {
     class FreelyAliasable(val reason: AliasableReason) : Aliasability()
     object NonAliasable : Aliasability()
-    class ImmutableUnique(val aliasability: Aliasability) : Aliasability()
 }
 
 enum class AliasableReason {
