@@ -1325,7 +1325,9 @@ class RsFnInferenceContext(
                             ?.functionList
                             ?.find { it.name == op.fnName }
 
-                        if (method != null && lhsType !is TyPrimitive) {
+                        val isLhsPrimitive = isPrimitiveOrInferPrimitive(lhsType)
+
+                        if (method != null && !isLhsPrimitive) {
                             val selfParameterType = method.selfParameter?.typeOfValue(lhsType)
                             val lhsAdjustment = BorrowReference(selfParameterType ?: TyUnknown)
                             ctx.addAdjustment(expr.left, lhsAdjustment)
@@ -1333,7 +1335,7 @@ class RsFnInferenceContext(
                             val parameterType = method.valueParameters.firstOrNull()?.typeReference?.type?.substitute(boundTrait.subst)
                             val rhsAdjustment = BorrowReference(parameterType ?: TyUnknown)
                             expr.right?.let { ctx.addAdjustment(it, rhsAdjustment) }
-                        } else if (lhsType !is TyPrimitive) {
+                        } else if (!isLhsPrimitive) {
                             val selfParameterType = TyReference(lhsType, IMMUTABLE)
                             val lhsAdjustment = BorrowReference(selfParameterType)
                             ctx.addAdjustment(expr.left, lhsAdjustment)
@@ -1364,7 +1366,9 @@ class RsFnInferenceContext(
                         ?.functionList
                         ?.find { it.name == op.fnName }
 
-                    if (method != null && lhsType !is TyPrimitive) {
+                    val isLhsPrimitive = isPrimitiveOrInferPrimitive(lhsType)
+
+                    if (method != null && !isLhsPrimitive) {
                         val adjustment = BorrowReference(method.selfParameter?.typeOfValue(lhsType) ?: TyUnknown)
                         ctx.addAdjustment(expr.left, adjustment)
                     }
@@ -1377,6 +1381,9 @@ class RsFnInferenceContext(
             }
         }
     }
+
+    private fun isPrimitiveOrInferPrimitive(lhsType: Ty) =
+        lhsType is TyPrimitive || lhsType is TyInfer.IntVar || lhsType is TyInfer.FloatVar
 
     private fun inferTryExprType(expr: RsTryExpr): Ty =
         inferTryExprOrMacroType(expr.expr, allowOption = true)

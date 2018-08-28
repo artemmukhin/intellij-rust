@@ -291,35 +291,8 @@ class CheckLoanContext(
         val errorNewOld = reportErrorIfLoanConflictsWithRestriction(newLoan, oldLoan, oldLoan, newLoan)
 
         // TODO
-        if (errorOldNew && errorNewOld) {
-            println("Loans conflict: old & new")
-            val oldKind = oldLoan.loanPath.kind
-            if (oldKind is Var) {
-                println(oldKind.original?.text)
-            } else if (oldKind is Extend && oldKind.loanPath.kind is Var) {
-                println(oldKind.loanPath.kind.original?.text)
-            }
-            // errorOldNew.error.emit()
-            // errorNewOld.error.cancel()
-        } else if (errorOldNew) {
-            println("Loans conflict: old")
-            val oldKind = oldLoan.loanPath.kind
-            if (oldKind is Var) {
-                println(oldKind.original?.text)
-            } else if (oldKind is Extend && oldKind.loanPath.kind is Var) {
-                println(oldKind.loanPath.kind.original?.text)
-            }
-            // errorOldNew.error.emit()
-        } else if (errorNewOld) {
-            println("Loans conflict: new")
-            val newKind = newLoan.loanPath.kind
-            if (newKind is Var) {
-                println(newKind.original?.text)
-            } else if (newKind is Extend && newKind.loanPath.kind is Var) {
-                println(newKind.loanPath.kind.original?.text)
-            }
-            // errorNewOld.error.emit()
-        } else {
+        if (errorOldNew || errorNewOld) {
+            bccx.reportLoansConflict(newLoan.loanPath)
             return true
         }
 

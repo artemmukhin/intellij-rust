@@ -497,18 +497,16 @@ class RsBorrowCheckerInspectionTest : RsInspectionsTestBase(RsBorrowCheckerInspe
         }
     """, checkWarn = false)
 
-    // TODO
     fun `test borrowck borrow`() = checkByText("""
         struct S { data: i32 }
 
         fn main() {
             let mut x: S = S { data: 42 };
             let y = &mut x;
-            let z = &x;
+            let z = &<error descr="Loan conflict">x</error>;
         }
     """, checkWarn = false)
 
-    // TODO
     fun `test borrowck borrow vec`() = checkByText("""
         struct S { data: i32 }
 
@@ -519,8 +517,8 @@ class RsBorrowCheckerInspectionTest : RsInspectionsTestBase(RsBorrowCheckerInspe
         fn main() {
             let mut vec = Vec::new();
             push42(&mut vec);
-            let x = &vec[0];
-            push42(&mut vec);
+            let x = &<error descr="Loan conflict">vec</error>[0];
+            push42(&mut <error descr="Loan conflict">vec</error>);
         }
     """, checkWarn = false)
 
@@ -531,7 +529,7 @@ class RsBorrowCheckerInspectionTest : RsInspectionsTestBase(RsBorrowCheckerInspe
             let mut vec = Vec::new();
             vec.push(S { data: 1 });
             let x = &vec[0];
-            vec.push(S { data: 2 });
+            <error descr="Loan conflict">vec</error>.push(S { data: 2 });
         }
     """, checkWarn = false)
 
@@ -544,7 +542,20 @@ class RsBorrowCheckerInspectionTest : RsInspectionsTestBase(RsBorrowCheckerInspe
         fn main() {
             let mut b = Box { data: S { num: 1 } };
             let s = &b.data;
-            clear(&mut b);
+            clear(&mut <error descr="Loan conflict">b</error>);
+        }
+    """, checkWarn = false)
+
+    fun `test borrowck dangling`() = checkByText("""
+        struct S { data: i32 }
+
+        fn f<'a>() -> &'a S {
+            let s = S { data: 1 };
+            return &s;
+        }
+
+        fn main() {
+            let x = f();
         }
     """, checkWarn = false)
 }

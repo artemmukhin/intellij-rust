@@ -309,10 +309,15 @@ class ExprUseWalker(
     }
 
     fun walkCondition(condition: RsCondition) {
-        val init = condition.expr
-        walkExpr(init)
-        val initCmt = mc.processExpr(init)
-        condition.pat?.let { walkIrrefutablePat(initCmt, it) }
+        val pat = condition.pat
+        if (pat != null) {
+            val init = condition.expr
+            walkExpr(init)
+            val initCmt = mc.processExpr(init)
+            walkIrrefutablePat(initCmt, pat)
+        } else {
+            walkExpr(condition.expr)
+        }
     }
 
     private fun walkBlock(block: RsBlock) {

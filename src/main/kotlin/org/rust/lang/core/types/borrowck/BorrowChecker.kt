@@ -141,12 +141,20 @@ data class LoanPath(val kind: LoanPathKind, val ty: Ty) {
         }
     }
 
+    val element: RsElement?
+        get() = when (kind) {
+            is LoanPathKind.Var -> kind.original
+            is LoanPathKind.Downcast -> kind.element
+            is LoanPathKind.Extend -> kind.loanPath.element
+            else -> null
+        }
+
     val containingExpr: RsExpr?
         get() = when (kind) {
-            is LoanPathKind.Var -> kind.original?.ancestorOrSelf<RsExpr>()
-            is LoanPathKind.Upvar -> null
-            is LoanPathKind.Downcast -> kind.element.ancestorOrSelf<RsExpr>()
-            is LoanPathKind.Extend -> (kind.loanPath.kind as? LoanPathKind.Var)?.original?.parent?.ancestorOrSelf<RsExpr>()
+            is LoanPathKind.Var -> element?.ancestorOrSelf()
+            is LoanPathKind.Downcast -> element?.ancestorOrSelf()
+            is LoanPathKind.Extend -> element?.parent?.ancestorOrSelf()
+            else -> null
         }
 
     val containingStmtText: String?
@@ -239,7 +247,8 @@ sealed class LoanPathElement {
 class BorrowCheckResult(
     val usedMutNodes: MutableSet<RsElement>,
     val usesOfMovedValue: List<UseOfMovedValueError>,
-    val moveErrors: MutableList<MoveError>
+    val moveErrors: MutableList<MoveError>,
+    val loanConflicts: MutableList<LoanPath>
 )
 
 class UseOfMovedValueError(val use: RsElement?, val move: RsElement?)
@@ -251,7 +260,8 @@ class BorrowCheckContext(
     val implLookup: ImplLookup = ImplLookup.relativeTo(body),
     val usedMutNodes: MutableSet<RsElement> = mutableSetOf(),
     val usesOfMovedValue: MutableList<UseOfMovedValueError> = mutableListOf(),
-    val moveErrors: MutableList<MoveError> = mutableListOf()
+    val moveErrors: MutableList<MoveError> = mutableListOf(),
+    val loanConflicts: MutableList<LoanPath> = mutableListOf()
 ) {
     fun isSubRegionOf(sub: Region, sup: Region): Boolean {
         val freeRegions = FreeRegionMap() // TODO
@@ -287,8 +297,11 @@ class BorrowCheckContext(
 
     // TODO: false positives
     fun reportReassignedImmutableVariable(loanPath: LoanPath, assignment: Assignment) {
-        print("###reportReassignedImmutableVariable: ")
-        println(loanPath.kind)
+        println("###reportReassignedImmutableVariable###")
+    }
+
+    fun reportLoansConflict(loanPath: LoanPath) {
+        loanConflicts.add(loanPath)
     }
 }
 
@@ -302,7 +315,7 @@ fun borrowck(owner: RsInferenceContextOwner): BorrowCheckResult? {
         checkLoans(bccx, data.loans, data.moveData, data.allLoans, body)
         // TODO: implement and call `unusedCheck(borrowCheckContext, body)`
     }
-    return BorrowCheckResult(bccx.usedMutNodes, bccx.usesOfMovedValue, bccx.moveErrors)
+    return BorrowCheckResult(bccx.usedMutNodes, bccx.usesOfMovedValue, bccx.moveErrors, bccx.loanConflicts)
 }
 
 fun buildBorrowckDataflowData(bccx: BorrowCheckContext, forceAnalysis: Boolean, body: RsBlock): AnalysisData? {

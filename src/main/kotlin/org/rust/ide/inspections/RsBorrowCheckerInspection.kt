@@ -43,6 +43,9 @@ class RsBorrowCheckerInspection : RsLocalInspectionTool() {
                     val move = it.from.element.ancestorOrSelf<RsExpr>()
                     if (move != null) registerMoveProblem(holder, move)
                 }
+                borrowCheckResult.loanConflicts.forEach { loanPath ->
+                    loanPath.element?.let { registerLoanConflictProblem(holder, it) }
+                }
             }
         }
 
@@ -57,6 +60,10 @@ class RsBorrowCheckerInspection : RsLocalInspectionTool() {
 
     private fun registerMoveProblem(holder: ProblemsHolder, element: RsElement) {
         holder.registerProblem(element, "Cannot move")
+    }
+
+    private fun registerLoanConflictProblem(holder: ProblemsHolder, element: RsElement) {
+        holder.registerProblem(element, "Loan conflict")
     }
 
     private fun checkMethodRequiresMutable(receiver: RsExpr, fn: RsFunction): Boolean {
