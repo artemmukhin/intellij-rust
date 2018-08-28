@@ -5,11 +5,13 @@
 
 package org.rust.lang.core.types.infer
 
-import com.intellij.openapi.util.Computable
 import org.rust.lang.core.psi.*
-import org.rust.lang.core.psi.ext.*
+import org.rust.lang.core.psi.ext.RsElement
+import org.rust.lang.core.psi.ext.containerExpr
+import org.rust.lang.core.psi.ext.descendantsOfType
+import org.rust.lang.core.psi.ext.mutability
 import org.rust.lang.core.resolve.ImplLookup
-import org.rust.lang.core.resolve.StdKnownItems
+import org.rust.lang.core.resolve.ref.deepResolve
 import org.rust.lang.core.types.builtinDeref
 import org.rust.lang.core.types.infer.Aliasability.FreelyAliasable
 import org.rust.lang.core.types.infer.Aliasability.NonAliasable
@@ -28,7 +30,6 @@ import org.rust.lang.core.types.regions.ReStatic
 import org.rust.lang.core.types.regions.Region
 import org.rust.lang.core.types.ty.*
 import org.rust.lang.core.types.type
-import org.rust.openapiext.recursionGuard
 import org.rust.stdext.nextOrNull
 
 
@@ -214,13 +215,7 @@ class Cmt(
         }
 }
 
-class MemoryCategorizationContext(val infcx: RsInferenceContext) {
-    fun process(element: RsInferenceContextOwner): RsMemoryCategorizationResult {
-        val result = mutableMapOf<RsExpr, Cmt>()
-        element.descendantsOfType<RsExpr>().map { result[it] = processExpr(it) }
-        return result
-    }
-
+class MemoryCategorizationContext(val lookup: ImplLookup, val inference: RsInferenceResult) {
     fun processExpr(expr: RsExpr): Cmt {
         val adjustments = expr.inference?.adjustments?.get(expr) ?: emptyList()
         return processExprAdjustedWith(expr, adjustments.asReversed().iterator())
@@ -278,7 +273,7 @@ class MemoryCategorizationContext(val infcx: RsInferenceContext) {
 
     private fun processPathExpr(pathExpr: RsPathExpr): Cmt {
         val type = pathExpr.type
-        val declaration = pathExpr.path.reference.resolve() ?: return Cmt(pathExpr, ty = type)
+        val declaration = pathExpr.path.reference.deepResolve() ?: return Cmt(pathExpr, ty = type)
         return when (declaration) {
             is RsConstant -> {
                 if (declaration.static != null) {
@@ -382,16 +377,6 @@ class MemoryCategorizationContext(val infcx: RsInferenceContext) {
     fun isTypeMovesByDefault(ty: Ty): Boolean =
         when (ty) {
             is TyUnknown, is TyPrimitive, is TyTuple, is TyReference, is TyPointer, is TyFunction -> false
-            else -> infcx.lookup.isCopy(ty).not()
+            else -> lookup.isCopy(ty).not()
         }
-}
-
-typealias RsMemoryCategorizationResult = MutableMap<RsExpr, Cmt>
-
-fun computeCategorizationIn(element: RsInferenceContextOwner): RsMemoryCategorizationResult {
-    val items = StdKnownItems.relativeTo(element)
-    val lookup = ImplLookup(element.project, items)
-    val mc = MemoryCategorizationContext(lookup.ctx)
-    return recursionGuard(element, Computable { mc.process(element) })
-        ?: error("Can not run nested categorization")
 }
