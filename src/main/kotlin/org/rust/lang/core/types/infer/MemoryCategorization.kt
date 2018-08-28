@@ -241,7 +241,7 @@ class MemoryCategorizationContext(val infcx: RsInferenceContext) {
         }
     }
 
-    fun processExprUnadjusted(expr: RsExpr): Cmt =
+    private fun processExprUnadjusted(expr: RsExpr): Cmt =
         when (expr) {
             is RsUnaryExpr -> processUnaryExpr(expr)
             is RsDotExpr -> processDotExpr(expr)
@@ -258,7 +258,7 @@ class MemoryCategorizationContext(val infcx: RsInferenceContext) {
         return processDeref(unaryExpr, baseCmt)
     }
 
-    fun processDotExpr(dotExpr: RsDotExpr): Cmt {
+    private fun processDotExpr(dotExpr: RsDotExpr): Cmt {
         if (dotExpr.methodCall != null) {
             return processRvalue(dotExpr)
         }
@@ -269,14 +269,14 @@ class MemoryCategorizationContext(val infcx: RsInferenceContext) {
         return cmtOfField(dotExpr, baseCmt, fieldName, type)
     }
 
-    fun processIndexExpr(indexExpr: RsIndexExpr): Cmt {
+    private fun processIndexExpr(indexExpr: RsIndexExpr): Cmt {
         val type = indexExpr.type
         val base = indexExpr.containerExpr ?: return Cmt(indexExpr, ty = type)
         val baseCmt = processExpr(base)
         return Cmt(indexExpr, Interior(baseCmt, InteriorIndex), baseCmt.mutabilityCategory.inherit(), type)
     }
 
-    fun processPathExpr(pathExpr: RsPathExpr): Cmt {
+    private fun processPathExpr(pathExpr: RsPathExpr): Cmt {
         val type = pathExpr.type
         val declaration = pathExpr.path.reference.resolve() ?: return Cmt(pathExpr, ty = type)
         return when (declaration) {
@@ -298,7 +298,7 @@ class MemoryCategorizationContext(val infcx: RsInferenceContext) {
         }
     }
 
-    fun processParenExpr(parenExpr: RsParenExpr): Cmt =
+    private fun processParenExpr(parenExpr: RsParenExpr): Cmt =
         processExpr(parenExpr.expr)
 
 
@@ -317,7 +317,7 @@ class MemoryCategorizationContext(val infcx: RsInferenceContext) {
 
     // `rvalue_promotable_map` is needed to distinguish rvalues with static region and rvalue with temporary region,
     // so now all rvalues have static region
-    fun processRvalue(expr: RsExpr, ty: Ty = expr.type): Cmt =
+    private fun processRvalue(expr: RsExpr, ty: Ty = expr.type): Cmt =
         Cmt(expr, Rvalue(ReStatic), Declared, ty)
 
     fun processRvalue(element: RsElement, tempScope: Region, ty: Ty): Cmt =
