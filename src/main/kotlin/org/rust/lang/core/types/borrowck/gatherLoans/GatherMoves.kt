@@ -32,7 +32,7 @@ class GatherMoveInfo(
 
 class GatherMoveContext(val bccx: BorrowCheckContext) {
     fun gatherDeclaration(moveData: MoveData, variable: RsElement, variableType: Ty) {
-        val loanPath = LoanPath(LoanPathKind.Var(variable.resolvedElement, variable), variableType)
+        val loanPath = LoanPath(LoanPathKind.Var(variable), variableType)
         moveData.addMove(loanPath, variable, MoveKind.Declared)
     }
 

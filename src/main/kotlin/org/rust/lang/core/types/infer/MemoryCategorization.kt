@@ -42,7 +42,7 @@ sealed class Categorization {
     object StaticItem : Categorization()
 
     /** Local variable */
-    data class Local(val element: RsElement) : Categorization()
+    data class Local(val declaration: RsElement) : Categorization()
 
     /** Dereference of a pointer */
     data class Deref(val cmt: Cmt, val pointerKind: PointerKind) : Categorization()
@@ -166,7 +166,7 @@ class Cmt(
                 val baseCmt = category.cmt
                 if (pointerKind is BorrowedPointer && pointerKind.borrowKind is ImmutableBorrow) {
                     when (baseCmt.category) {
-                        is Local -> LocalDeref(baseCmt.category.element)
+                        is Local -> LocalDeref(baseCmt.category.declaration)
                         is Interior -> AdtFieldDeref
                         else -> null
                     }
@@ -176,7 +176,7 @@ class Cmt(
                     baseCmt.immutabilityBlame
                 }
             }
-            is Local -> ImmutableLocal(category.element)
+            is Local -> ImmutableLocal(category.declaration)
             is Interior -> category.cmt.immutabilityBlame
             is Downcast -> category.cmt.immutabilityBlame
             else -> null

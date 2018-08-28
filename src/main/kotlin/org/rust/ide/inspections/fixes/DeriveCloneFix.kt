@@ -27,7 +27,7 @@ import org.rust.lang.core.resolve.StdKnownItems
 import org.rust.lang.core.types.ty.TyAdt
 import org.rust.lang.core.types.type
 
-class MoveFix(element: RsElement) : LocalQuickFixAndIntentionActionOnPsiElement(element) {
+class DeriveCloneFix(element: RsElement) : LocalQuickFixAndIntentionActionOnPsiElement(element) {
     override fun getFamilyName(): String = name
     override fun getText(): String = "Derive Copy trait"
 
@@ -80,7 +80,7 @@ class MoveFix(element: RsElement) : LocalQuickFixAndIntentionActionOnPsiElement(
     }
 
     companion object {
-        fun createIfCompatible(element: RsElement): MoveFix? {
+        fun createIfCompatible(element: RsElement): DeriveCloneFix? {
             val pathExpr = (element as? RsPathExpr) ?: return null
             val type = (pathExpr as? RsPathExpr)?.type ?: return null
             val structItem = ((type as? TyAdt)?.item as? RsStructItem) ?: return null
@@ -90,7 +90,7 @@ class MoveFix(element: RsElement) : LocalQuickFixAndIntentionActionOnPsiElement(
             val fieldTypes = structItem.blockFields?.fieldDeclList?.mapNotNull { it.typeReference?.type } ?: return null
             if (fieldTypes.any { !implLookup.isCopy(it) }) return null
 
-            return MoveFix(pathExpr)
+            return DeriveCloneFix(pathExpr)
         }
     }
 }

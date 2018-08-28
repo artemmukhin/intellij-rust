@@ -432,8 +432,7 @@ class RsBorrowCheckerInspectionTest : RsInspectionsTestBase(RsBorrowCheckerInspe
             return y;
         }
 
-        fn main() {
-        }
+        fn main() {}
     """, checkWarn = false)
 
     fun `test borrowck move from array`() = checkFixIsUnavailable("Derive Copy trait", """

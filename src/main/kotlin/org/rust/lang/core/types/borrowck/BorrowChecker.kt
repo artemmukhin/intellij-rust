@@ -27,7 +27,7 @@ data class LoanPath(val kind: LoanPathKind, val ty: Ty) {
     fun killScope(bccx: BorrowCheckContext): Scope =
         when (kind) {
             is Var -> {
-                val variable = kind.element.resolvedElement
+                val variable = kind.declaration
                 if (variable is RsPatBinding) {
                     bccx.regionScopeTree.getVariableScope(variable) ?: Scope.Node(variable)
                 } else {
@@ -40,16 +40,16 @@ data class LoanPath(val kind: LoanPathKind, val ty: Ty) {
 
     val element: RsElement?
         get() = when (kind) {
-            is LoanPathKind.Var -> kind.original
+            is LoanPathKind.Var -> kind.use
             is LoanPathKind.Downcast -> kind.element
-            is LoanPathKind.Extend -> (kind.loanPath.kind as? LoanPathKind.Var)?.original
+            is LoanPathKind.Extend -> (kind.loanPath.kind as? LoanPathKind.Var)?.use
         }
 
     val containingExpr: RsExpr?
         get() = when (kind) {
             is LoanPathKind.Var -> element?.ancestorOrSelf()
             is LoanPathKind.Downcast -> element?.ancestorOrSelf()
-            is LoanPathKind.Extend -> element?.parent?.ancestorOrSelf<RsExpr>()
+            is LoanPathKind.Extend -> element?.parent?.ancestorOrSelf()
         }
 
     companion object {
@@ -60,7 +60,7 @@ data class LoanPath(val kind: LoanPathKind, val ty: Ty) {
             return when (category) {
                 is Categorization.Rvalue, Categorization.StaticItem -> null
 
-                is Categorization.Local -> loanPath(Var(cmt.element.resolvedElement, cmt.element))
+                is Categorization.Local -> loanPath(Var(category.declaration, cmt.element))
 
                 is Categorization.Deref -> {
                     val baseLp = computeFor(category.cmt) ?: return null
@@ -70,8 +70,8 @@ data class LoanPath(val kind: LoanPathKind, val ty: Ty) {
                 is Categorization.Interior -> {
                     val baseCmt = category.cmt
                     val baseLp = computeFor(baseCmt) ?: return null
-                    val optVariantId = if (baseCmt.category is Categorization.Downcast) baseCmt.element else null
-                    val kind = Extend(baseLp, cmt.mutabilityCategory, Interior(optVariantId, category.interiorKind))
+                    val interiorElement = (baseCmt.category as? Categorization.Downcast)?.element
+                    val kind = Extend(baseLp, cmt.mutabilityCategory, Interior(interiorElement, category.interiorKind))
                     loanPath(kind)
                 }
 
@@ -87,16 +87,16 @@ data class LoanPath(val kind: LoanPathKind, val ty: Ty) {
 }
 
 sealed class LoanPathKind {
-    class Var(val element: RsElement, val original: RsElement? = null) : LoanPathKind() {
+    class Var(val declaration: RsElement, val use: RsElement = declaration) : LoanPathKind() {
         override fun equals(other: Any?): Boolean {
             if (this === other) return true
             if (javaClass != other?.javaClass) return false
-            if (element != (other as Var).element) return false
+            if (declaration != (other as Var).declaration) return false
             return true
         }
 
         override fun hashCode(): Int {
-            return element.hashCode()
+            return declaration.hashCode()
         }
     }
     data class Downcast(val loanPath: LoanPath, val element: RsElement) : LoanPathKind()
