@@ -14,6 +14,7 @@ import com.intellij.xdebugger.settings.XDebuggerSettings
 class RsDebuggerSettings : XDebuggerSettings<RsDebuggerSettings>("Rust") {
 
     var isRendersEnabled: Boolean = true
+    var isBundledPrintersEnabled: Boolean = true
 
     override fun getState(): RsDebuggerSettings = this
 

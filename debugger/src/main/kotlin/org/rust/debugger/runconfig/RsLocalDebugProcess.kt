@@ -15,28 +15,50 @@ import com.jetbrains.cidr.execution.debugger.CidrLocalDebugProcess
 import com.jetbrains.cidr.execution.debugger.backend.DebuggerCommandException
 import com.jetbrains.cidr.execution.debugger.backend.gdb.GDBDriver
 import com.jetbrains.cidr.execution.debugger.backend.lldb.LLDBDriver
+import org.rust.debugger.LLDB_PP
+import org.rust.debugger.LLDB_PP_PATH
+import java.nio.file.InvalidPathException
 
 class RsLocalDebugProcess(
     parameters: RunParameters,
     debugSession: XDebugSession,
     consoleBuilder: TextConsoleBuilder
 ) : CidrLocalDebugProcess(parameters, debugSession, consoleBuilder) {
-
-    fun loadPrettyPrinters(sysroot: String) {
-        val threadId = currentThreadId
-        val frameIndex = currentFrameIndex
+    fun loadRustcPrettyPrinters(sysroot: String) {
         postCommand { driver ->
             when (driver) {
-                is LLDBDriver -> driver.loadPrettyPrinters(threadId, frameIndex, sysroot)
-                is GDBDriver -> driver.loadPrettyPrinters(threadId, frameIndex, sysroot)
+                is LLDBDriver -> driver.loadRustcPrettyPrinter(currentThreadId, currentFrameIndex, sysroot)
+                is GDBDriver -> driver.loadRustcPrettyPrinter(currentThreadId, currentFrameIndex, sysroot)
             }
         }
     }
 
-    private fun LLDBDriver.loadPrettyPrinters(threadId: Long, frameIndex: Int, sysroot: String) {
-        val path = "$sysroot/lib/rustlib/etc/lldb_rust_formatters.py".systemDependentAndEscaped()
+    fun loadBundledPrettyPrinters() {
+        postCommand { driver ->
+            when (driver) {
+                is LLDBDriver -> driver.loadBundledPrettyPrinter(currentThreadId, currentFrameIndex)
+                is GDBDriver -> throw NotImplementedError()
+            }
+        }
+    }
+
+    private fun LLDBDriver.loadBundledPrettyPrinter(threadId: Long, frameIndex: Int) {
         try {
-            executeConsoleCommand(threadId, frameIndex, """command script import "$path"""")
+            executeConsoleCommand(threadId, frameIndex, """command script import "$LLDB_PP_PATH" """)
+            executeConsoleCommand(threadId, frameIndex, """type synthetic add -l $LLDB_PP.StdVecProvider -x "Vec<.*>" """)
+            executeConsoleCommand(threadId, frameIndex, """type summary add -F $LLDB_PP.SizeSummaryProvider -e -x "Vec<.*>" """)
+        } catch (e: DebuggerCommandException) {
+            printlnToConsole(e.message)
+            LOG.warn(e)
+        } catch (e: InvalidPathException) {
+            LOG.warn(e)
+        }
+    }
+
+    private fun LLDBDriver.loadRustcPrettyPrinter(threadId: Long, frameIndex: Int, sysroot: String) {
+        val rustcPrinterPath = "$sysroot/lib/rustlib/etc/lldb_rust_formatters.py".systemDependentAndEscaped()
+        try {
+            executeConsoleCommand(threadId, frameIndex, """command script import "$rustcPrinterPath" """)
             executeConsoleCommand(threadId, frameIndex, """type summary add --no-value --python-function lldb_rust_formatters.print_val -x ".*" --category Rust""")
             executeConsoleCommand(threadId, frameIndex, """type category enable Rust""")
         } catch (e: DebuggerCommandException) {
@@ -45,7 +67,7 @@ class RsLocalDebugProcess(
         }
     }
 
-    private fun GDBDriver.loadPrettyPrinters(threadId: Long, frameIndex: Int, sysroot: String) {
+    private fun GDBDriver.loadRustcPrettyPrinter(threadId: Long, frameIndex: Int, sysroot: String) {
         val path = "$sysroot/lib/rustlib/etc".systemDependentAndEscaped()
         // Avoid multiline Python scripts due to https://youtrack.jetbrains.com/issue/CPP-9090
         val command = """python """ +

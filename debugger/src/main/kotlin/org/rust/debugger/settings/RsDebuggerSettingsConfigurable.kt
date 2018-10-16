@@ -18,21 +18,28 @@ class RsDebuggerSettingsConfigurable(
     private val isRendersEnabledCheckbox: JBCheckBox = JBCheckBox("Enable Rust library renders")
     private var isRendersEnabled: Boolean by CheckboxDelegate(isRendersEnabledCheckbox)
 
+    private val isBundledPrintersEnabledCheckbox: JBCheckBox = JBCheckBox("Enable bundled pretty-printers")
+    private var isBundledPrintersEnabled: Boolean by CheckboxDelegate(isBundledPrintersEnabledCheckbox)
+
     override fun getId(): String = "Debugger.Rust"
     override fun getDisplayName(): String = DISPLAY_NAME
 
     override fun createComponent(): JComponent = panel {
         row { isRendersEnabledCheckbox() }
+        row { isBundledPrintersEnabledCheckbox() }
     }
 
-    override fun isModified(): Boolean = isRendersEnabled != settings.isRendersEnabled
+    override fun isModified(): Boolean =
+        isRendersEnabled != settings.isRendersEnabled || isBundledPrintersEnabled != settings.isBundledPrintersEnabled
 
     override fun apply() {
         settings.isRendersEnabled = isRendersEnabled
+        settings.isBundledPrintersEnabled = isBundledPrintersEnabled
     }
 
     override fun reset() {
         isRendersEnabled = settings.isRendersEnabled
+        isBundledPrintersEnabled = settings.isBundledPrintersEnabled
     }
 
     companion object {

@@ -12,6 +12,7 @@ import org.gradle.api.JavaVersion.VERSION_1_8
 import org.gradle.api.tasks.testing.logging.TestExceptionFormat
 import org.gradle.api.tasks.testing.logging.TestLogEvent
 import org.gradle.jvm.tasks.Jar
+import org.jetbrains.intellij.tasks.PrepareSandboxTask
 import java.net.HttpURLConnection
 import java.net.URL
 import java.nio.file.Path
@@ -205,6 +206,12 @@ project(":") {
                 .map { it.configurations }
                 .flatMap { listOf(it.compile, it.testCompile) }
                 .forEach { it.resolve() }
+        }
+    }
+
+    tasks.withType<PrepareSandboxTask> {
+        from("prettyPrinters") {
+            into("${intellij.pluginName}/prettyPrinters")
         }
     }
 }
