@@ -8,14 +8,9 @@ from lldb import SBValue, SBType
 ###################################################
 
 
-def size_as_summary(valobj):
-    # type: (SBValue) -> str
-    return 'size=' + str(valobj.GetNumChildren())
-
-
-def SizeSummaryProvider(valobj, dict):
+def SizeSummaryProvider(valobj, internal_dict):
     # type: (SBValue, dict) -> str
-    return size_as_summary(valobj)
+    return 'size=' + str(valobj.GetNumChildren())
 
 
 ################################################################################################################

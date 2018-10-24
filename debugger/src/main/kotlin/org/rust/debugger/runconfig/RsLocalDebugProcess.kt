@@ -37,7 +37,9 @@ class RsLocalDebugProcess(
         postCommand { driver ->
             when (driver) {
                 is LLDBDriver -> driver.loadBundledPrettyPrinter(currentThreadId, currentFrameIndex)
-                is GDBDriver -> throw NotImplementedError()
+                is GDBDriver -> {
+                    // TODO
+                }
             }
         }
     }
@@ -45,8 +47,8 @@ class RsLocalDebugProcess(
     private fun LLDBDriver.loadBundledPrettyPrinter(threadId: Long, frameIndex: Int) {
         try {
             executeConsoleCommand(threadId, frameIndex, """command script import "$LLDB_PP_PATH" """)
-            executeConsoleCommand(threadId, frameIndex, """type synthetic add -l $LLDB_PP.StdVecProvider -x "Vec<.*>" """)
-            executeConsoleCommand(threadId, frameIndex, """type summary add -F $LLDB_PP.SizeSummaryProvider -e -x "Vec<.*>" """)
+            executeConsoleCommand(threadId, frameIndex, """type synthetic add -l $LLDB_PP.StdVecProvider -x "^(alloc::([a-zA-Z]+::)+)Vec<.+>$" --category Rust""")
+            executeConsoleCommand(threadId, frameIndex, """type summary add -F $LLDB_PP.SizeSummaryProvider -e -x "^(alloc::([a-zA-Z]+::)+)Vec<.+>$" --category Rust""")
         } catch (e: DebuggerCommandException) {
             printlnToConsole(e.message)
             LOG.warn(e)
