@@ -31,6 +31,13 @@ def SizeSummaryProvider(valobj, internal_dict):
 ################################################################################################################
 
 class StdVecProvider:
+    """alloc::vec::Vec<T>
+
+    struct Vec<T> { buf: RawVec<T>, len: usize }
+    struct RawVec<T> { ptr: Unique<T>, cap: usize, ... }
+    struct Unique<T: ?Sized> { pointer: NonZero<*const T>, ... }
+    struct NonZero<T>(T)
+    """
     def __init__(self, valobj, internal_dict):
         # type: (SBValue, dict) -> StdVecProvider
         self.valobj = valobj

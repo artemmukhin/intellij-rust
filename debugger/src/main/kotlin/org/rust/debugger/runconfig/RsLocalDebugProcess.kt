@@ -49,6 +49,7 @@ class RsLocalDebugProcess(
             executeConsoleCommand(threadId, frameIndex, """command script import "$LLDB_PP_PATH" """)
             executeConsoleCommand(threadId, frameIndex, """type synthetic add -l $LLDB_PP.StdVecProvider -x "^(alloc::([a-zA-Z]+::)+)Vec<.+>$" --category Rust""")
             executeConsoleCommand(threadId, frameIndex, """type summary add -F $LLDB_PP.SizeSummaryProvider -e -x "^(alloc::([a-zA-Z]+::)+)Vec<.+>$" --category Rust""")
+            executeConsoleCommand(threadId, frameIndex, """type category enable Rust""")
         } catch (e: DebuggerCommandException) {
             printlnToConsole(e.message)
             LOG.warn(e)

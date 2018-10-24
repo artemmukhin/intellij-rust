@@ -96,11 +96,11 @@ class RsDebugRunner : AsyncProgramRunner<RunnerSettings>() {
                             RsLocalDebugProcess(runParameters, session, state.consoleBuilder).apply {
                                 ProcessTerminatedListener.attach(processHandler, environment.project)
                                 val settings = RsDebuggerSettings.getInstance()
-                                if (settings.isRendersEnabled && sysroot != null) {
-                                    loadRustcPrettyPrinters(sysroot)
-                                }
                                 if (settings.isBundledPrintersEnabled) {
                                     loadBundledPrettyPrinters()
+                                }
+                                if (settings.isRendersEnabled && sysroot != null) {
+                                    loadRustcPrettyPrinters(sysroot)
                                 }
                                 start()
                             }
