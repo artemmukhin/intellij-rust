@@ -15,7 +15,7 @@ import com.jetbrains.cidr.execution.debugger.CidrLocalDebugProcess
 import com.jetbrains.cidr.execution.debugger.backend.DebuggerCommandException
 import com.jetbrains.cidr.execution.debugger.backend.gdb.GDBDriver
 import com.jetbrains.cidr.execution.debugger.backend.lldb.LLDBDriver
-import org.rust.debugger.LLDB_PP
+import org.rust.debugger.LLDB_PP_LOOKUP
 import org.rust.debugger.LLDB_PP_PATH
 import java.nio.file.InvalidPathException
 
@@ -47,8 +47,8 @@ class RsLocalDebugProcess(
     private fun LLDBDriver.loadBundledPrettyPrinter(threadId: Long, frameIndex: Int) {
         try {
             executeConsoleCommand(threadId, frameIndex, """command script import "$LLDB_PP_PATH" """)
-            executeConsoleCommand(threadId, frameIndex, """type synthetic add -l $LLDB_PP.StdVecProvider -x "^(alloc::([a-zA-Z]+::)+)Vec<.+>$" --category Rust""")
-            executeConsoleCommand(threadId, frameIndex, """type summary add -F $LLDB_PP.SizeSummaryProvider -e -x "^(alloc::([a-zA-Z]+::)+)Vec<.+>$" --category Rust""")
+            executeConsoleCommand(threadId, frameIndex, """type synthetic add -l $LLDB_PP_LOOKUP.synthetic_lookup -x ".*" --category Rust""")
+            executeConsoleCommand(threadId, frameIndex, """type summary add -F $LLDB_PP_LOOKUP.summary_lookup  -e -x ".*" --category Rust""")
             executeConsoleCommand(threadId, frameIndex, """type category enable Rust""")
         } catch (e: DebuggerCommandException) {
             printlnToConsole(e.message)

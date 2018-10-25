@@ -98,8 +98,7 @@ class RsDebugRunner : AsyncProgramRunner<RunnerSettings>() {
                                 val settings = RsDebuggerSettings.getInstance()
                                 if (settings.isBundledPrintersEnabled) {
                                     loadBundledPrettyPrinters()
-                                }
-                                if (settings.isRendersEnabled && sysroot != null) {
+                                } else if (settings.isRendersEnabled && sysroot != null) {
                                     loadRustcPrettyPrinters(sysroot)
                                 }
                                 start()

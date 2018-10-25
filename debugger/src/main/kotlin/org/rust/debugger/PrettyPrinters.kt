@@ -12,5 +12,5 @@ import com.intellij.openapi.extensions.PluginId
 private const val PLUGIN_ID: String = "org.rust.lang"
 private val PLUGIN: IdeaPluginDescriptor = PluginManager.getPlugin(PluginId.getId(PLUGIN_ID))!!
 
-const val LLDB_PP: String = "jetbrains_lldb_pretty_printer"
-val LLDB_PP_PATH: String = PLUGIN.path.resolve("prettyPrinters/$LLDB_PP.py").path
+const val LLDB_PP_LOOKUP: String = "lookup"
+val LLDB_PP_PATH: String = PLUGIN.path.resolve("prettyPrinters/$LLDB_PP_LOOKUP.py").path
