@@ -38,6 +38,7 @@ import org.rust.cargo.runconfig.CargoRunState
 import org.rust.cargo.runconfig.command.CargoCommandConfiguration
 import org.rust.cargo.toolchain.CargoCommandLine
 import org.rust.cargo.toolchain.impl.CargoMetadata
+import org.rust.debugger.DataFormatters
 import org.rust.debugger.settings.RsDebuggerSettings
 import org.rust.openapiext.GeneralCommandLine
 import org.rust.openapiext.withWorkDirectory
@@ -96,10 +97,11 @@ class RsDebugRunner : AsyncProgramRunner<RunnerSettings>() {
                             RsLocalDebugProcess(runParameters, session, state.consoleBuilder).apply {
                                 ProcessTerminatedListener.attach(processHandler, environment.project)
                                 val settings = RsDebuggerSettings.getInstance()
-                                if (settings.isBundledPrintersEnabled) {
-                                    loadBundledPrettyPrinters()
-                                } else if (settings.isRendersEnabled && sysroot != null) {
-                                    loadRustcPrettyPrinters(sysroot)
+                                when (settings.dataFormatters) {
+                                    DataFormatters.COMPILER -> if (sysroot != null) loadRustcPrettyPrinters(sysroot)
+                                    DataFormatters.BUNDLE -> loadBundledPrettyPrinters()
+                                    DataFormatters.NONE -> {
+                                    }
                                 }
                                 start()
                             }

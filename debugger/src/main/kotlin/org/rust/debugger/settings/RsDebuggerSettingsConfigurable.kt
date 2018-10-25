@@ -6,40 +6,48 @@
 package org.rust.debugger.settings
 
 import com.intellij.openapi.options.SearchableConfigurable
-import com.intellij.ui.components.JBCheckBox
+import com.intellij.openapi.ui.ComboBox
+import com.intellij.ui.components.Label
 import com.intellij.ui.layout.panel
-import org.rust.openapiext.CheckboxDelegate
+import com.jetbrains.cidr.cpp.toolchains.CPPToolchains
+import org.rust.debugger.DataFormatters
 import javax.swing.JComponent
 
 class RsDebuggerSettingsConfigurable(
     private val settings: RsDebuggerSettings
 ) : SearchableConfigurable {
 
-    private val isRendersEnabledCheckbox: JBCheckBox = JBCheckBox("Enable Rust library renders")
-    private var isRendersEnabled: Boolean by CheckboxDelegate(isRendersEnabledCheckbox)
+    private val isLLDB = CPPToolchains.getInstance().defaultToolchain?.debuggerKind?.isLLDB() == true
 
-    private val isBundledPrintersEnabledCheckbox: JBCheckBox = JBCheckBox("Enable bundled pretty-printers")
-    private var isBundledPrintersEnabled: Boolean by CheckboxDelegate(isBundledPrintersEnabledCheckbox)
+    private val dataFormattersLabel = Label("Data formatters")
+
+    private val dataFormatters = ComboBox<DataFormatters>().apply {
+        DataFormatters.values()
+            .filter { isLLDB || it != DataFormatters.BUNDLE }
+            .sortedBy { it.index }
+            .forEach { addItem(it) }
+    }
 
     override fun getId(): String = "Debugger.Rust"
     override fun getDisplayName(): String = DISPLAY_NAME
 
     override fun createComponent(): JComponent = panel {
-        row { isRendersEnabledCheckbox() }
-        row { isBundledPrintersEnabledCheckbox() }
+        row {
+            dataFormattersLabel.labelFor = dataFormatters
+            dataFormattersLabel()
+            dataFormatters()
+        }
     }
 
     override fun isModified(): Boolean =
-        isRendersEnabled != settings.isRendersEnabled || isBundledPrintersEnabled != settings.isBundledPrintersEnabled
+        dataFormatters.selectedIndex != settings.dataFormatters.index
 
     override fun apply() {
-        settings.isRendersEnabled = isRendersEnabled
-        settings.isBundledPrintersEnabled = isBundledPrintersEnabled
+        settings.dataFormatters = DataFormatters.fromIndex(dataFormatters.selectedIndex)
     }
 
     override fun reset() {
-        isRendersEnabled = settings.isRendersEnabled
-        isBundledPrintersEnabled = settings.isBundledPrintersEnabled
+        dataFormatters.selectedIndex = settings.dataFormatters.index
     }
 
     companion object {

@@ -10,11 +10,11 @@ import com.intellij.util.PlatformUtils
 import com.intellij.util.xmlb.XmlSerializerUtil
 import com.intellij.xdebugger.settings.DebuggerSettingsCategory
 import com.intellij.xdebugger.settings.XDebuggerSettings
+import org.rust.debugger.DataFormatters
 
 class RsDebuggerSettings : XDebuggerSettings<RsDebuggerSettings>("Rust") {
 
-    var isRendersEnabled: Boolean = true
-    var isBundledPrintersEnabled: Boolean = true
+    var dataFormatters: DataFormatters = DataFormatters.default
 
     override fun getState(): RsDebuggerSettings = this
 
