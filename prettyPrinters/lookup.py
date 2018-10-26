@@ -1,8 +1,10 @@
 import re
-from lldb import eTypeClassStruct
+from lldb import eTypeClassStruct, formatters
 
 from providers import *
 
+formatters.Logger._lldb_formatters_debug_level = 3
+formatters.Logger._lldb_formatters_debug_filename = "/Users/jetbrains/lldb.py.log"
 
 class RustType:
     OTHER = 0
@@ -10,13 +12,14 @@ class RustType:
     STD_STRING = 2
     STD_STR = 3
     STD_RC = 4
+    STD_HASHMAP = 5
 
 
 STD_VEC_REGEX = re.compile(r"^(alloc::([a-zA-Z]+::)+)Vec<.+>$")
 STD_STRING_REGEX = re.compile(r"^(alloc::([a-zA-Z]+::)+)String$")
 STD_STR_REGEX = re.compile(r"^&str$")
 STD_RC_REGEX = re.compile(r"^(alloc::([a-zA-Z]+::)+)Rc<.+>$")
-
+STD_HASHMAP_REGEX = re.compile(r"^(std::collections::([a-zA-Z]+::)+)HashMap<.+>$")
 
 def classify_rust_type(type):
     # type: (SBType) -> int
@@ -32,6 +35,8 @@ def classify_rust_type(type):
             return RustType.STD_STR
         if re.match(STD_RC_REGEX, name):
             return RustType.STD_RC
+        if re.match(STD_HASHMAP_REGEX, name):
+            return RustType.STD_HASHMAP
 
     return RustType.OTHER
 
@@ -62,5 +67,7 @@ def synthetic_lookup(valobj, dict):
         return StdVecSyntheticProvider(valobj, dict)
     if rust_type == RustType.STD_RC:
         return StdRcSyntheticProvider(valobj, dict)
+    if rust_type == RustType.STD_HASHMAP:
+        return StdHashMapSyntheticProvider(valobj, dict)
 
     return None  # Important: return None, not valobj

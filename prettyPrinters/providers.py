@@ -1,4 +1,4 @@
-from lldb import SBValue, SBType, SBData, SBError, eBasicTypeUnsignedLong
+from lldb import SBValue, SBType, SBData, SBError, eBasicTypeUnsignedLong, formatters
 
 
 #################################################################################################################
@@ -49,8 +49,10 @@ class StdVecSyntheticProvider:
 
     def __init__(self, valobj, dict):
         # type: (SBValue, dict) -> StdVecSyntheticProvider
+        logger = formatters.Logger.Logger()
         self.valobj = valobj
         self.update()
+        logger >> "Providing synthetic children for a Vec named " + str(valobj.GetName())
 
     def num_children(self):
         # type: () -> int
@@ -187,3 +189,53 @@ def StdRcSummaryProvider(valobj, dict):
     strong = valobj.GetChildMemberWithName("strong").GetValueAsUnsigned()
     weak = valobj.GetChildMemberWithName("weak").GetValueAsUnsigned()
     return "strong={}, weak={}".format(strong, weak)
+
+
+class StdHashMapSyntheticProvider:
+    """Pretty-printer for std::collections::hash::map::HashMap<K, V, S>
+
+    struct HashMap<K, V, S> {..., table: RawTable<K, V>, ... }
+    struct RawTable<K, V> { capacity_mask: usize, size: usize, hashes: TaggedHashUintPtr, ... }
+    """
+
+    def __init__(self, valobj, dict):
+        # type: (SBValue, dict) -> StdHashMapSyntheticProvider
+        self.valobj = valobj
+        self.update()
+
+    def num_children(self):
+        # type: () -> int
+        return self.size
+
+    def get_child_index(self, name):
+        # type: (str) -> int
+        index = name.lstrip('[').rstrip(']')
+        return -1
+
+    def get_child_at_index(self, index):
+        # type: (int) -> SBValue
+        return None
+
+    def update(self):
+        # type: () -> None
+        logger = formatters.Logger.Logger()
+
+        self.table = self.valobj.GetChildMemberWithName("table")  # type: SBValue
+        self.size = self.table.GetChildMemberWithName("size").GetValueAsUnsigned()
+        self.hashes = self.table.GetChildMemberWithName("hashes")
+        self.tagged_hash_uint = self.hashes.GetChildAtIndex(0).GetChildAtIndex(0)
+
+        ptr = self.tagged_hash_uint.GetValueAsUnsigned() & ~1
+        self.hash_start = ptr
+        self.pair_start = ptr + 2  # ???
+        self.idx = 0
+
+        self.pair_type = self.table.GetChildMemberWithName("marker").GetType()  # type: SBType
+        logger >> "HashMap type: " + self.pair_type.GetName()
+
+        self.pair_type_size = self.pair_type.GetByteSize()  # type: int
+        logger >> "HashMap type size: " + str(self.pair_type_size)
+
+    def has_children(self):
+        # type: () -> bool
+        return False
