@@ -1,4 +1,17 @@
+import lldb
+
 from lldb_providers import *
+from rust_types import *
+
+
+def classify_rust_type(type):
+    type_class = type.GetTypeClass()
+    if type_class == lldb.eTypeClassStruct:
+        return classify_struct(type.name, type.fields)
+    if type_class == lldb.eTypeClassUnion:
+        return classify_union(type.fields)
+
+    return RustType.OTHER
 
 
 def summary_lookup(valobj, dict):
