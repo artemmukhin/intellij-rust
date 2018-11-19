@@ -8,8 +8,9 @@ package org.rust.debugger
 import org.rust.openapiext.plugin
 
 
-const val LLDB_PP_LOOKUP: String = "lookup"
-val LLDB_PP_PATH: String get() = plugin().path.resolve("prettyPrinters/$LLDB_PP_LOOKUP.py").path
+val PP_PATH: String get() = plugin().path.resolve("prettyPrinters").path
+const val LLDB_LOOKUP: String = "lldb_lookup"
+const val GDB_LOOKUP: String = "gdb_lookup"
 
 enum class LLDBRenderers(private val description: String) {
     NONE("No renderers"),
@@ -26,7 +27,8 @@ enum class LLDBRenderers(private val description: String) {
 
 enum class GDBRenderers(private val description: String) {
     NONE("No renderers"),
-    COMPILER("Rust compiler's renderers");
+    COMPILER("Rust compiler's renderers"),
+    BUNDLED("Bundled renderers");
 
     override fun toString(): String = description
 
