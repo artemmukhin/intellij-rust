@@ -38,5 +38,8 @@ def lookup(valobj):
         return StdStrProvider(valobj)
     if rust_type == RustType.STD_VEC:
         return StdVecProvider(valobj)
+    if rust_type == RustType.STD_VEC_DEQUE:
+        return StdVecDequeProvider(valobj)
+
 
     return None

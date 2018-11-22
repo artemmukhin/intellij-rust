@@ -77,3 +77,25 @@ class StdVecProvider:
     @staticmethod
     def display_hint():
         return "array"
+
+
+class StdVecDequeProvider:
+    def __init__(self, valobj):
+        self.valobj = valobj
+        self.head = int(valobj["head"])
+        self.tail = int(valobj["tail"])
+        self.buf = valobj["buf"]
+        self.cap = int(self.buf["cap"])
+        self.size = self.head - self.tail if self.head >= self.tail else self.cap + self.head - self.tail
+        self.data_ptr = self.buf["ptr"]["pointer"]["__0"]
+
+    def to_string(self):
+        return "len=" + str(self.size)
+
+    def children(self):
+        for index in xrange(0, self.size):
+            yield (str(index), (self.data_ptr + ((self.tail + index) % self.cap)).dereference())
+
+    @staticmethod
+    def display_hint():
+        return "array"

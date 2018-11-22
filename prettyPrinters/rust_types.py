@@ -15,11 +15,13 @@ class RustType:
     REGULAR_UNION = "RegularUnion"
 
     STD_VEC = "StdVec"
+    STD_VEC_DEQUE = "StdVecDeque"
     STD_STRING = "StdString"
     STD_STR = "StdStr"
 
 
 STD_VEC_REGEX = re.compile(r"^(alloc::([a-zA-Z]+::)+)Vec<.+>$")
+STD_VEC_DEQUE_REGEX = re.compile(r"^(alloc::([a-zA-Z_]+::)+)VecDeque<.+>$")
 STD_STRING_REGEX = re.compile(r"^(alloc::([a-zA-Z]+::)+)String$")
 STD_STR_REGEX = re.compile(r"^&str$")
 
@@ -40,6 +42,8 @@ def classify_struct(name, fields):
 
     if re.match(STD_VEC_REGEX, name):
         return RustType.STD_VEC
+    if re.match(STD_VEC_DEQUE_REGEX, name):
+        return RustType.STD_VEC_DEQUE
     if re.match(STD_STRING_REGEX, name):
         return RustType.STD_STRING
     if re.match(STD_STR_REGEX, name):
