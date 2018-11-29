@@ -493,3 +493,95 @@ class StdRefSyntheticProvider:
     def has_children(self):
         # type: () -> bool
         return True
+
+
+def StdBTreeMapSummaryProvider(valobj, dict):
+    # type: (SBValue, dict) -> str
+    return 'size=' + str(valobj.GetNumChildren() / 2)
+
+
+def children_of_node(node, height, want_values):
+    ptr = node.GetChildMemberWithName("ptr").GetChildMemberWithName("pointer")
+    node_field = ptr.type.GetFieldAtIndex(0)
+    node_ptr = ptr.GetChildMemberWithName(node_field.name)
+    if height > 0:
+        pointee_type = node_ptr.type.GetPointeeType()
+        type_name = pointee_type.GetName().replace('LeafNode', 'InternalNode')
+        module = node.GetFrame().GetModule()
+        node_type = module.FindFirstType(type_name)
+        node_ptr = node_ptr.Cast(node_type.GetPointerType())
+        leaf = node_ptr.GetChildMemberWithName("data")
+    else:
+        leaf = node_ptr.Dereference()
+
+    keys = leaf.GetChildMemberWithName("keys").GetChildMemberWithName("value").GetChildMemberWithName("value")
+    key_type = keys.GetType().GetArrayElementType()
+    key_type_size = key_type.GetByteSize()
+
+    if want_values:
+        vals = leaf.GetChildMemberWithName("vals").GetChildMemberWithName("value").GetChildMemberWithName("value")
+        val_type = vals.GetType().GetArrayElementType()
+        val_type_size = val_type.GetByteSize()
+
+    length = leaf.GetChildMemberWithName("len").GetValueAsUnsigned()
+
+    for i in range(length + 1):
+        if height > 0:
+            edge = node_ptr.GetChildMemberWithName("edges").GetChildAtIndex(i)
+            for child in children_of_node(edge, height - 1, want_values):
+                yield child
+        if i < length:
+            key = keys.CreateChildAtOffset("key[%s]" % i, i * key_type_size, key_type)
+            if want_values:
+                val = vals.CreateChildAtOffset("val[%s]" % i, i * val_type_size, val_type)
+                yield (key, val)
+            else:
+                yield key
+
+
+class StdBTreeMapSyntheticProvider:
+    """Pretty-printer for alloc::collections::btree::map::BTreeMap<K, V>"""
+
+    def __init__(self, valobj, dict):
+        # type: (SBValue, dict) -> StdBTreeMapSyntheticProvider
+        logger = Logger.Logger()
+        logger >> "[StdBTreeMapSyntheticProvider] for " + str(valobj.GetName())
+        self.valobj = valobj
+        self.keys = []
+        self.values = []
+        self.length = 0
+        self.update()
+
+    def num_children(self):
+        # type: () -> int
+        return self.length
+
+    def get_child_index(self, name):
+        # type: (str) -> int
+        index = name.lstrip('[').rstrip(']')
+        if index.isdigit() and index < self.length:
+            return int(index)
+        else:
+            return -1
+
+    def get_child_at_index(self, index):
+        # type: (int) -> SBValue
+        return self.keys[index]  # TODO: "return" both key and value
+
+    def update(self):
+        # type: () -> None
+        root = self.valobj.GetChildMemberWithName("root")
+        node = root.GetChildMemberWithName("node")
+        height = root.GetChildMemberWithName("height").GetValueAsUnsigned()
+
+        self.keys = []
+        self.values = []
+        for child in children_of_node(node, height, want_values=True):
+            self.keys.append(child[0])
+            self.values.append(child[1])
+
+        self.length = len(self.values)
+
+    def has_children(self):
+        # type: () -> bool
+        return True

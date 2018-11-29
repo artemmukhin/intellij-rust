@@ -27,6 +27,8 @@ class RustType:
     STD_REF = "StdRef"
     STD_REF_MUT = "StdRefMut"
     STD_REF_CELL = "StdRefCell"
+    STD_BTREE_MAP = "StdBTreeMap"
+
 
 
 STD_STRING_REGEX = re.compile(r"^(alloc::([a-zA-Z_]+::)+)String$")
@@ -39,6 +41,7 @@ STD_CELL_REGEX = re.compile(r"^(core::([a-zA-Z_]+::)+)Cell<.+>$")
 STD_REF_REGEX = re.compile(r"^(core::([a-zA-Z_]+::)+)Ref<.+>$")
 STD_REF_MUT_REGEX = re.compile(r"^(core::([a-zA-Z_]+::)+)RefMut<.+>$")
 STD_REF_CELL_REGEX = re.compile(r"^(core::([a-zA-Z_]+::)+)RefCell<.+>$")
+STD_BTREE_MAP_REGEX = re.compile(r"^(alloc::([a-zA-Z_]+::)+)BTreeMap<.+>$")
 
 TUPLE_ITEM_REGEX = re.compile(r"__\d+$")
 
@@ -81,6 +84,8 @@ def classify_rust_type(type):
             return RustType.STD_REF_MUT
         if re.match(STD_REF_CELL_REGEX, name):
             return RustType.STD_REF_CELL
+        if re.match(STD_BTREE_MAP_REGEX, name):
+            return RustType.STD_BTREE_MAP
 
         if fields[0].name == ENUM_DISR_FIELD_NAME:
             if len(fields) == 1:
@@ -138,6 +143,9 @@ def summary_lookup(valobj, dict):
         return StdRefSummaryProvider(valobj, dict)
     if rust_type == RustType.STD_REF_CELL:
         return StdRefSummaryProvider(valobj, dict)
+    # if rust_type == RustType.STD_BTREE_MAP:
+    #     return StdBTreeMapSummaryProvider(valobj, dict)
+
 
     return ""
 
@@ -168,6 +176,8 @@ def synthetic_lookup(valobj, dict):
         return StdVecSyntheticProvider(valobj, dict)
     if rust_type == RustType.STD_VEC_DEQUE:
         return StdVecDequeSyntheticProvider(valobj, dict)
+    if rust_type == RustType.STD_BTREE_MAP:
+        return StdBTreeMapSyntheticProvider(valobj, dict)
 
     if rust_type == RustType.STD_RC:
         return StdRcSyntheticProvider(valobj, dict)
