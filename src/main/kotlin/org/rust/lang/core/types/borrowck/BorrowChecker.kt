@@ -23,7 +23,8 @@ class BorrowCheckContext(
     val implLookup: ImplLookup = ImplLookup.relativeTo(body),
     private val usesOfMovedValue: MutableList<UseOfMovedValueError> = mutableListOf(),
     private val usesOfUninitializedVariable: MutableList<UseOfUninitializedVariable> = mutableListOf(),
-    private val moveErrors: MutableList<MoveError> = mutableListOf()
+    private val moveErrors: MutableList<MoveError> = mutableListOf(),
+    private val unusedVariables: MutableList<RsElement> = mutableListOf()
 ) {
     companion object {
         fun buildFor(owner: RsInferenceContextOwner): BorrowCheckContext? {
@@ -39,16 +40,22 @@ class BorrowCheckContext(
         if (data != null) {
             val clcx = CheckLoanContext(this, data.moveData)
             clcx.checkLoans(body)
+            data.flowedLiveness.check(this)
         }
-        return BorrowCheckResult(this.usesOfMovedValue, this.usesOfUninitializedVariable, this.moveErrors)
+        return BorrowCheckResult(usesOfMovedValue, usesOfUninitializedVariable, moveErrors, unusedVariables)
     }
 
     private fun buildAnalysisData(bccx: BorrowCheckContext): AnalysisData? {
         val glcx = GatherLoanContext(this)
         val moveData = glcx.check().takeIf { it.isNotEmpty() } ?: return null
+
+        val livenessContext = LivenessContext(this)
+        val livenessData = livenessContext.check()
+
         val cfg = ControlFlowGraph.buildFor(bccx.body)
         val flowedMoves = FlowedMoveData.buildFor(moveData, bccx, cfg)
-        return AnalysisData(flowedMoves)
+        val flowedLiveness = FlowedLivenessData.buildFor(livenessData, cfg)
+        return AnalysisData(flowedMoves, flowedLiveness)
     }
 
     fun reportUseOfMovedValue(loanPath: LoanPath, move: Move) {
@@ -62,14 +69,19 @@ class BorrowCheckContext(
     fun reportMoveError(from: Cmt, to: MovePlace?) {
         moveErrors.add(MoveError(from, to))
     }
+
+    fun reportUnusedVariable(element: RsElement) {
+        unusedVariables.add(element)
+    }
 }
 
-class AnalysisData(val moveData: FlowedMoveData)
+class AnalysisData(val moveData: FlowedMoveData, val flowedLiveness: FlowedLivenessData)
 
 data class BorrowCheckResult(
     val usesOfMovedValue: List<UseOfMovedValueError>,
     val usesOfUninitializedVariable: List<UseOfUninitializedVariable>,
-    val moveErrors: List<MoveError>
+    val moveErrors: List<MoveError>,
+    val unusedVariables: MutableList<RsElement>
 )
 
 class UseOfMovedValueError(val use: RsElement, val move: Move)
