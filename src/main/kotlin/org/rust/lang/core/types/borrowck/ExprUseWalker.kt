@@ -38,10 +38,7 @@ interface Delegate {
      */
     fun matchedPat(pat: RsPat, cmt: Cmt, mode: MatchMode)
 
-    /**
-     * The value found at [cmt] is either copied or moved via the
-     * pattern binding [consumePat], depending on mode.
-     */
+    /** The value found at [cmt] is either copied or moved via the pattern binding [consumePat], depending on mode */
     fun consumePat(pat: RsPat, cmt: Cmt, mode: ConsumeMode)
 
     /** The local variable [element] is declared but not initialized */

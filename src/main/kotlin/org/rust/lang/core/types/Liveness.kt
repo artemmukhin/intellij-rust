@@ -3,20 +3,19 @@
  * found in the LICENSE file.
  */
 
-package org.rust.lang.core.types.borrowck
+package org.rust.lang.core.types
 
 import org.rust.lang.core.DataFlowContext
 import org.rust.lang.core.DataFlowOperator
 import org.rust.lang.core.KillFrom
 import org.rust.lang.core.cfg.ControlFlowGraph
 import org.rust.lang.core.psi.RsPat
-import org.rust.lang.core.psi.RsValueParameter
 import org.rust.lang.core.psi.ext.RsElement
+import org.rust.lang.core.types.borrowck.*
 import org.rust.lang.core.types.infer.Categorization
 import org.rust.lang.core.types.infer.Cmt
 import org.rust.lang.core.types.infer.MemoryCategorizationContext
 import org.rust.lang.core.types.infer.MutabilityCategory
-import org.rust.lang.core.types.inference
 import org.rust.openapiext.testAssert
 import java.util.*
 
@@ -32,10 +31,6 @@ class FlowedLivenessData(
     private val livenessData: LivenessData,
     private val dfcxLiveness: LivenessDataFlow
 ) {
-    fun check(bccx: BorrowCheckContext) {
-        // TODO: bccx.reportUnusedVariable(var)
-    }
-
     companion object {
         fun buildFor(livenessData: LivenessData, cfg: ControlFlowGraph): FlowedLivenessData {
             val dfcxLiveness = DataFlowContext(cfg, LiveDataFlowOperator, livenessData.usages.size)
@@ -49,10 +44,69 @@ class FlowedLivenessData(
     }
 }
 
-class LivenessContext(val bccx: BorrowCheckContext, val livenessData: LivenessData = LivenessData()) : Delegate {
+class LivenessResult(
+    val unusedArguments: List<RsElement>,
+    val unusedVariables: List<RsElement>,
+    val deadAssignments: List<RsElement>
+)
+
+/*
+class GatherLivenessContext(
+    val bccx: BorrowCheckContext,
+    val livenessData: LivenessData = LivenessData(),
+    val gatherLiveness: GatherLiveness = GatherLiveness(livenessData),
+    val checkLiveness: CheckLiveness = CheckLiveness(livenessData),
+//    val unusedArguments: MutableList<RsElement> = mutableListOf(),
+//    val unusedVariables: MutableList<RsElement> = mutableListOf(),
+//    val deadAssignments: MutableList<RsElement> = mutableListOf()
+) {
+    fun build(): LivenessData {
+        val mc = MemoryCategorizationContext(bccx.implLookup, bccx.owner.inference)
+        val gatherVisitor = ExprUseWalker(gatherLiveness, MemoryCategorizationContext(bccx.implLookup, bccx.owner.inference))
+        gatherVisitor.consumeBody(bccx.body)
+
+        return gatherLiveness.livenessData
+    }
+}
+ */
+
+class GatherLivenessContext(
+    val bccx: BorrowCheckContext,
+    val livenessData: LivenessData = LivenessData()
+) : Delegate {
     override fun consume(element: RsElement, cmt: Cmt, mode: ConsumeMode) {
-        val usagePath = livenessData.usagePathOf(cmt) ?: return
-        livenessData.addUsage(usagePath, element)
+        val path = livenessData.usagePathOf(cmt) ?: return
+        livenessData.addUsage(path, element)
+    }
+
+    override fun matchedPat(pat: RsPat, cmt: Cmt, mode: MatchMode) {}
+
+    override fun consumePat(pat: RsPat, cmt: Cmt, mode: ConsumeMode) {
+        val path = livenessData.usagePathOf(cmt) ?: return
+        livenessData.addDeclaration(path, pat)
+    }
+
+    override fun declarationWithoutInit(element: RsElement) {
+        val kind = UsagePathKind.Var(element)
+        val path = livenessData.usagePathOf(kind) ?: return
+        livenessData.addDeclaration(path, element)
+    }
+
+    override fun mutate(assignmentElement: RsElement, assigneeCmt: Cmt, mode: MutateMode) {
+        val path = livenessData.usagePathOf(assigneeCmt) ?: return
+        livenessData.addAssignment(path, assignmentElement)
+    }
+
+    fun gather(): LivenessData {
+        val gatherVisitor = ExprUseWalker(this, MemoryCategorizationContext(bccx.implLookup, bccx.owner.inference))
+        gatherVisitor.consumeBody(bccx.body)
+        return livenessData
+    }
+}
+
+class CheckLiveness(val bccx: BorrowCheckContext, val flowedLivenessData: FlowedLivenessData) : Delegate {
+    override fun consume(element: RsElement, cmt: Cmt, mode: ConsumeMode) {
+        TODO("not implemented")
     }
 
     override fun matchedPat(pat: RsPat, cmt: Cmt, mode: MatchMode) {
@@ -71,10 +125,9 @@ class LivenessContext(val bccx: BorrowCheckContext, val livenessData: LivenessDa
         TODO("not implemented")
     }
 
-    fun check(): LivenessData {
-        val visitor = ExprUseWalker(this, MemoryCategorizationContext(bccx.implLookup, bccx.owner.inference))
-        visitor.consumeBody(bccx.body)
-        return livenessData
+    fun check(bccx: BorrowCheckContext) {
+        val checkVisitor = ExprUseWalker(this, MemoryCategorizationContext(bccx.implLookup, bccx.owner.inference))
+        checkVisitor.consumeBody(bccx.body)
     }
 }
 
@@ -91,14 +144,16 @@ class UsagePath(
     override fun hashCode(): Int =
         kind.hashCode()
 
+    /*
     val isVariablePath: Boolean
         get() = parent == null
 
     val isPrecise: Boolean
         get() = when (kind) {
             is UsagePathKind.Var -> true
-            is UsagePathKind.Extend -> kind.interior == null
+            is UsagePathKind.Extend -> kind.isInterior
         }
+     */
 }
 
 class Usage(val path: UsagePath, val element: RsElement)
@@ -108,7 +163,11 @@ sealed class UsagePathKind {
     data class Var(val declaration: RsElement) : UsagePathKind()
 
     /** [Extend] kind relates to [[Categorization.Deref] and [Categorization.Interior] memory categories */
-    data class Extend(val baseKind: UsagePathKind, val mutCategory: MutabilityCategory, val interior: Categorization.Interior?) : UsagePathKind()
+    data class Extend(
+        val baseKind: UsagePathKind,
+        val mutCategory: MutabilityCategory,
+        val isInterior: Boolean
+    ) : UsagePathKind()
 
     companion object {
         fun computeFor(cmt: Cmt): UsagePathKind? {
@@ -116,17 +175,17 @@ sealed class UsagePathKind {
             return when (category) {
                 is Categorization.Rvalue, Categorization.StaticItem -> null
 
-                is Categorization.Local -> UsagePathKind.Var(category.declaration)
+                is Categorization.Local -> Var(category.declaration)
 
                 is Categorization.Deref -> {
                     val baseKind = computeFor(category.cmt) ?: return null
-                    UsagePathKind.Extend(baseKind, cmt.mutabilityCategory, null)
+                    Extend(baseKind, cmt.mutabilityCategory, false)
                 }
 
                 is Categorization.Interior -> {
                     val baseCmt = category.cmt
                     val baseKind = computeFor(baseCmt) ?: return null
-                    UsagePathKind.Extend(baseKind, cmt.mutabilityCategory, category)
+                    Extend(baseKind, cmt.mutabilityCategory, true)
                 }
 
                 else -> null
@@ -135,18 +194,21 @@ sealed class UsagePathKind {
     }
 }
 
+data class Declaration(val path: UsagePath, val element: RsElement)
+data class Assignment(val path: UsagePath, val element: RsElement)
+
 class LivenessData(
     val usages: MutableList<Usage> = mutableListOf(),
-    // TODO
-//    val declarations: MutableList<RsLetDecl> = mutableListOf(),
-    val arguments: MutableMap<RsValueParameter, UsagePath> = mutableMapOf(),
+//    val arguments: MutableList<Argument> = mutableListOf(),
+    val declarations: MutableList<Declaration> = mutableListOf(),
+    val assignments: MutableList<Assignment> = mutableListOf(),
     val paths: MutableList<UsagePath> = mutableListOf(),
     val pathMap: MutableMap<UsagePathKind, UsagePath> = mutableMapOf()
 ) {
+    fun usagePathOf(cmt: Cmt): UsagePath? =
+        UsagePathKind.computeFor(cmt)?.let { usagePathOf(it) }
 
-
-    fun usagePathOf(cmt: Cmt): UsagePath? {
-        val kind = UsagePathKind.computeFor(cmt) ?: return null
+    fun usagePathOf(kind: UsagePathKind): UsagePath? {
         pathMap[kind]?.let { return it }
 
         val oldSize = when (kind) {
@@ -173,6 +235,7 @@ class LivenessData(
         return paths.last()
     }
 
+    /*
     private fun eachExtendingPath(usagePath: UsagePath, action: (UsagePath) -> Boolean): Boolean {
         if (!action(usagePath)) return false
         var path = usagePath.firstChild
@@ -182,28 +245,40 @@ class LivenessData(
         }
         return true
     }
-
     private fun kill(usagePath: UsagePath, killElement: RsElement, dfcxLiveness: LivenessDataFlow) {
         if (!usagePath.isPrecise) return
 
+        dfcxLiveness.addKill(KillFrom.Execution, killElement, usagePath.index)
         eachExtendingPath(usagePath) { path ->
             dfcxLiveness.addKill(KillFrom.Execution, killElement, path.index)
             true
         }
     }
+     */
 
     fun addGenKills(dfcxLiveness: LivenessDataFlow) {
-        usages.forEach { usage ->
+        for (usage in usages) {
             dfcxLiveness.addGen(usage.element, usage.path.index)
         }
 
-        // TODO: kill arguments and local variables
-//        paths.forEach { path ->
-//            kill(path, path.declaration, dfcxLiveness)
-//        }
+        for (declaration in declarations) {
+            dfcxLiveness.addKill(KillFrom.ScopeEnd, declaration.element, declaration.path.index)
+        }
+
+        for (assignment in assignments) {
+            dfcxLiveness.addKill(KillFrom.Execution, assignment.element, assignment.path.index)
+        }
     }
 
     fun addUsage(usagePath: UsagePath, element: RsElement) {
         usages.add(Usage(usagePath, element))
+    }
+
+    fun addAssignment(usagePath: UsagePath, element: RsElement) {
+        assignments.add(Assignment(usagePath, element))
+    }
+
+    fun addDeclaration(usagePath: UsagePath, element: RsElement) {
+        declarations.add(Declaration(usagePath, element))
     }
 }

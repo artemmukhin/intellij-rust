@@ -11,6 +11,9 @@ import org.rust.lang.core.psi.ext.RsElement
 import org.rust.lang.core.psi.ext.RsInferenceContextOwner
 import org.rust.lang.core.psi.ext.body
 import org.rust.lang.core.resolve.ImplLookup
+import org.rust.lang.core.types.CheckLiveness
+import org.rust.lang.core.types.FlowedLivenessData
+import org.rust.lang.core.types.GatherLivenessContext
 import org.rust.lang.core.types.borrowck.gatherLoans.GatherLoanContext
 import org.rust.lang.core.types.infer.Cmt
 import org.rust.lang.core.types.regions.ScopeTree
@@ -40,7 +43,8 @@ class BorrowCheckContext(
         if (data != null) {
             val clcx = CheckLoanContext(this, data.moveData)
             clcx.checkLoans(body)
-            data.flowedLiveness.check(this)
+            val checkLiveness = CheckLiveness(this, data.flowedLiveness)
+            checkLiveness.check(this)
         }
         return BorrowCheckResult(usesOfMovedValue, usesOfUninitializedVariable, moveErrors, unusedVariables)
     }
@@ -49,8 +53,8 @@ class BorrowCheckContext(
         val glcx = GatherLoanContext(this)
         val moveData = glcx.check().takeIf { it.isNotEmpty() } ?: return null
 
-        val livenessContext = LivenessContext(this)
-        val livenessData = livenessContext.check()
+        val livenessContext = GatherLivenessContext(this)
+        val livenessData = livenessContext.gather()
 
         val cfg = ControlFlowGraph.buildFor(bccx.body)
         val flowedMoves = FlowedMoveData.buildFor(moveData, bccx, cfg)
