@@ -9,6 +9,7 @@ import org.rust.lang.core.DataFlowContext
 import org.rust.lang.core.DataFlowOperator
 import org.rust.lang.core.KillFrom
 import org.rust.lang.core.cfg.ControlFlowGraph
+import org.rust.lang.core.psi.RsExpr
 import org.rust.lang.core.psi.RsPat
 import org.rust.lang.core.psi.ext.RsElement
 import org.rust.lang.core.types.borrowck.*
@@ -33,7 +34,7 @@ class FlowedLivenessData(
 ) {
     companion object {
         fun buildFor(livenessData: LivenessData, cfg: ControlFlowGraph): FlowedLivenessData {
-            val dfcxLiveness = DataFlowContext(cfg, LiveDataFlowOperator, livenessData.usages.size)
+            val dfcxLiveness = DataFlowContext(cfg, LiveDataFlowOperator, livenessData.paths.size)
 
             livenessData.addGenKills(dfcxLiveness)
             dfcxLiveness.addKillsFromFlowExits()
@@ -92,6 +93,7 @@ class GatherLivenessContext(
         livenessData.addDeclaration(path, element)
     }
 
+    // почему вызывается для параметра? fn foo(`par <-- mutate`: i32)
     override fun mutate(assignmentElement: RsElement, assigneeCmt: Cmt, mode: MutateMode) {
         val path = livenessData.usagePathOf(assigneeCmt) ?: return
         livenessData.addAssignment(path, assignmentElement)
@@ -111,27 +113,21 @@ class GatherLivenessContext(
 
 class CheckLiveness(val bccx: BorrowCheckContext, val flowedLivenessData: FlowedLivenessData) : Delegate {
     override fun consume(element: RsElement, cmt: Cmt, mode: ConsumeMode) {
-        TODO("not implemented")
     }
 
     override fun matchedPat(pat: RsPat, cmt: Cmt, mode: MatchMode) {
-        TODO("not implemented")
     }
 
     override fun consumePat(pat: RsPat, cmt: Cmt, mode: ConsumeMode) {
-        TODO("not implemented")
     }
 
     override fun declarationWithoutInit(element: RsElement) {
-        TODO("not implemented")
     }
 
     override fun mutate(assignmentElement: RsElement, assigneeCmt: Cmt, mode: MutateMode) {
-        TODO("not implemented")
     }
 
     override fun usage(element: RsElement, cmt: Cmt) {
-        TODO("not implemented")
     }
 
     fun check(bccx: BorrowCheckContext) {
@@ -182,7 +178,13 @@ sealed class UsagePathKind {
         fun computeFor(cmt: Cmt): UsagePathKind? {
             val category = cmt.category
             return when (category) {
-                is Categorization.Rvalue, Categorization.StaticItem -> null
+                is Categorization.Rvalue -> {
+                    val declaration = (cmt.element as? RsExpr)?.declaration ?: return null
+                    return Var(declaration)
+                }
+
+                // TODO
+                is Categorization.StaticItem -> null
 
                 is Categorization.Local -> Var(category.declaration)
 
