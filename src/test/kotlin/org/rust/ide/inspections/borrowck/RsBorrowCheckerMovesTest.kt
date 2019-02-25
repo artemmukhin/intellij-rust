@@ -15,8 +15,6 @@ class RsBorrowCheckerMovesTest : RsInspectionsTestBase(RsBorrowCheckerInspection
     fun `test move by call`() = checkByText("""
         struct S { data: i32 }
 
-        fn f(s: S) {}
-
         fn main() {
             let x = S { data: 42 };
             let mut i = 0;
@@ -26,6 +24,8 @@ class RsBorrowCheckerMovesTest : RsInspectionsTestBase(RsBorrowCheckerInspection
             }
             <error descr="Use of moved value">x<caret></error>;
         }
+
+        fn f(s: S) {}
     """, checkWarn = false)
 
     fun `test move struct by assign 1`() = checkByText("""

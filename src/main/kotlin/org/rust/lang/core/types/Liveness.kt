@@ -11,7 +11,10 @@ import org.rust.lang.core.KillFrom
 import org.rust.lang.core.cfg.ControlFlowGraph
 import org.rust.lang.core.psi.RsExpr
 import org.rust.lang.core.psi.RsPat
+import org.rust.lang.core.psi.RsPatBinding
 import org.rust.lang.core.psi.ext.RsElement
+import org.rust.lang.core.psi.ext.RsItemElement
+import org.rust.lang.core.psi.ext.descendantsOfType
 import org.rust.lang.core.types.borrowck.*
 import org.rust.lang.core.types.infer.Categorization
 import org.rust.lang.core.types.infer.Cmt
@@ -83,8 +86,13 @@ class GatherLivenessContext(
     override fun matchedPat(pat: RsPat, cmt: Cmt, mode: MatchMode) {}
 
     override fun consumePat(pat: RsPat, cmt: Cmt, mode: ConsumeMode) {
+        pat.descendantsOfType<RsPatBinding>().forEach { binding ->
+            val kind = UsagePathKind.Var(binding)
+            val path = livenessData.usagePathOf(kind) ?: return
+            livenessData.addDeclaration(path, binding)
+        }
         val path = livenessData.usagePathOf(cmt) ?: return
-        livenessData.addDeclaration(path, pat)
+        livenessData.addUsage(path, pat)
     }
 
     override fun declarationWithoutInit(element: RsElement) {
@@ -180,6 +188,7 @@ sealed class UsagePathKind {
             return when (category) {
                 is Categorization.Rvalue -> {
                     val declaration = (cmt.element as? RsExpr)?.declaration ?: return null
+                    if (declaration is RsItemElement) return null
                     return Var(declaration)
                 }
 
