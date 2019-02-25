@@ -97,6 +97,11 @@ class GatherLivenessContext(
         livenessData.addAssignment(path, assignmentElement)
     }
 
+    override fun usage(element: RsElement, cmt: Cmt) {
+//        val path = livenessData.usagePathOf(cmt) ?: return
+//        livenessData.addUsage(path, element)
+    }
+
     fun gather(): LivenessData {
         val gatherVisitor = ExprUseWalker(this, MemoryCategorizationContext(bccx.implLookup, bccx.owner.inference))
         gatherVisitor.consumeBody(bccx.body)
@@ -122,6 +127,10 @@ class CheckLiveness(val bccx: BorrowCheckContext, val flowedLivenessData: Flowed
     }
 
     override fun mutate(assignmentElement: RsElement, assigneeCmt: Cmt, mode: MutateMode) {
+        TODO("not implemented")
+    }
+
+    override fun usage(element: RsElement, cmt: Cmt) {
         TODO("not implemented")
     }
 
