@@ -104,7 +104,13 @@ class GatherLivenessContext(
     // почему вызывается для параметра? fn foo(`par <-- mutate`: i32)
     override fun mutate(assignmentElement: RsElement, assigneeCmt: Cmt, mode: MutateMode) {
         val path = livenessData.usagePathOf(assigneeCmt) ?: return
-        livenessData.addAssignment(path, assignmentElement)
+        when (mode) {
+            MutateMode.Init, MutateMode.JustWrite -> livenessData.addAssignment(path, assignmentElement)
+            MutateMode.WriteAndRead -> {
+                livenessData.addUsage(path, assignmentElement)
+                livenessData.addAssignment(path, assignmentElement)
+            }
+        }
     }
 
     override fun usage(element: RsElement, cmt: Cmt) {
