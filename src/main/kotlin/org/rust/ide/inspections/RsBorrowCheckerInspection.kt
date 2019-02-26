@@ -5,7 +5,6 @@
 
 package org.rust.ide.inspections
 
-import com.intellij.codeInspection.ProblemHighlightType
 import com.intellij.codeInspection.ProblemsHolder
 import org.rust.ide.annotator.fixes.AddMutableFix
 import org.rust.ide.inspections.fixes.DeriveCopyFix
@@ -48,15 +47,6 @@ class RsBorrowCheckerInspection : RsLocalInspectionTool() {
                     val move = it.from.element.ancestorOrSelf<RsExpr>()
                     if (move != null) registerMoveProblem(holder, move)
                 }
-                borrowCheckResult.unusedVariables.forEach {
-                    registerUnusedVariableProblem(holder, it)
-                }
-                borrowCheckResult.unusedArguments.forEach {
-                    registerUnusedArgumentProblem(holder, it)
-                }
-                borrowCheckResult.deadAssignments.forEach {
-                    registerDeadAssignment(holder, it)
-                }
             }
         }
 
@@ -76,18 +66,6 @@ class RsBorrowCheckerInspection : RsLocalInspectionTool() {
 
     private fun registerUseOfUninitializedVariableProblem(holder: ProblemsHolder, use: RsElement) {
         holder.registerProblem(use, "Use of possibly uninitialized variable")
-    }
-
-    private fun registerUnusedArgumentProblem(holder: ProblemsHolder, declaration: RsElement) {
-        holder.registerProblem(declaration, "Unused parameter", ProblemHighlightType.WARNING)
-    }
-
-    private fun registerUnusedVariableProblem(holder: ProblemsHolder, declaration: RsElement) {
-        holder.registerProblem(declaration, "Unused variable", ProblemHighlightType.WARNING)
-    }
-
-    private fun registerDeadAssignment(holder: ProblemsHolder, assignment: RsElement) {
-        holder.registerProblem(assignment, "Dead assignment", ProblemHighlightType.WARNING)
     }
 
     private fun checkMethodRequiresMutable(receiver: RsExpr, fn: RsFunction): Boolean {

@@ -5,16 +5,13 @@
 
 package org.rust.lang.core.types.borrowck
 
-import org.rust.lang.core.cfg.ControlFlowGraph
 import org.rust.lang.core.psi.RsBlock
 import org.rust.lang.core.psi.ext.RsElement
 import org.rust.lang.core.psi.ext.RsInferenceContextOwner
 import org.rust.lang.core.psi.ext.body
 import org.rust.lang.core.resolve.ImplLookup
-import org.rust.lang.core.types.CheckLiveness
-import org.rust.lang.core.types.FlowedLivenessData
-import org.rust.lang.core.types.GatherLivenessContext
 import org.rust.lang.core.types.borrowck.gatherLoans.GatherLoanContext
+import org.rust.lang.core.types.controlFlowGraph
 import org.rust.lang.core.types.infer.Cmt
 import org.rust.lang.core.types.regions.ScopeTree
 import org.rust.lang.core.types.regions.getRegionScopeTree
@@ -26,10 +23,7 @@ class BorrowCheckContext(
     val implLookup: ImplLookup = ImplLookup.relativeTo(body),
     private val usesOfMovedValue: MutableList<UseOfMovedValueError> = mutableListOf(),
     private val usesOfUninitializedVariable: MutableList<UseOfUninitializedVariable> = mutableListOf(),
-    private val moveErrors: MutableList<MoveError> = mutableListOf(),
-    private val unusedVariables: MutableList<RsElement> = mutableListOf(),
-    private val unusedArguments: MutableList<RsElement> = mutableListOf(),
-    private val deadAssignments: MutableList<RsElement> = mutableListOf()
+    private val moveErrors: MutableList<MoveError> = mutableListOf()
 ) {
     companion object {
         fun buildFor(owner: RsInferenceContextOwner): BorrowCheckContext? {
@@ -45,16 +39,11 @@ class BorrowCheckContext(
         if (data != null) {
             val clcx = CheckLoanContext(this, data.moveData)
             clcx.checkLoans(body)
-            val checkLiveness = CheckLiveness(this, data.flowedLiveness)
-            checkLiveness.check(this)
         }
         return BorrowCheckResult(
             usesOfMovedValue,
             usesOfUninitializedVariable,
-            moveErrors,
-            unusedVariables,
-            unusedArguments,
-            deadAssignments
+            moveErrors
         )
     }
 
@@ -62,13 +51,9 @@ class BorrowCheckContext(
         val glcx = GatherLoanContext(this)
         val moveData = glcx.check().takeIf { it.isNotEmpty() } ?: return null
 
-        val livenessContext = GatherLivenessContext(this)
-        val livenessData = livenessContext.gather()
-
-        val cfg = ControlFlowGraph.buildFor(bccx.body)
+        val cfg = owner.controlFlowGraph ?: return null
         val flowedMoves = FlowedMoveData.buildFor(moveData, bccx, cfg)
-        val flowedLiveness = FlowedLivenessData.buildFor(livenessData, cfg)
-        return AnalysisData(flowedMoves, flowedLiveness)
+        return AnalysisData(flowedMoves)
     }
 
     fun reportUseOfMovedValue(loanPath: LoanPath, move: Move) {
@@ -82,29 +67,14 @@ class BorrowCheckContext(
     fun reportMoveError(from: Cmt, to: MovePlace?) {
         moveErrors.add(MoveError(from, to))
     }
-
-    fun reportUnusedVariable(element: RsElement) {
-        unusedVariables.add(element)
-    }
-
-    fun reportUnusedArgument(element: RsElement) {
-        unusedArguments.add(element)
-    }
-
-    fun reportDeadAssignment(element: RsElement) {
-        deadAssignments.add(element)
-    }
 }
 
-class AnalysisData(val moveData: FlowedMoveData, val flowedLiveness: FlowedLivenessData)
+class AnalysisData(val moveData: FlowedMoveData)
 
 data class BorrowCheckResult(
     val usesOfMovedValue: List<UseOfMovedValueError>,
     val usesOfUninitializedVariable: List<UseOfUninitializedVariable>,
-    val moveErrors: List<MoveError>,
-    val unusedVariables: List<RsElement>,
-    val unusedArguments: List<RsElement>,
-    val deadAssignments: List<RsElement>
+    val moveErrors: List<MoveError>
 )
 
 class UseOfMovedValueError(val use: RsElement, val move: Move)

@@ -258,7 +258,7 @@ class ExprUseWalker(private val delegate: Delegate, private val mc: MemoryCatego
 
     private fun walkCondition(condition: RsCondition) {
         val init = condition.expr
-        walkExpr(init)
+        consumeExpr(init)
         val initCmt = mc.processExpr(init)
         condition.pat?.let { walkIrrefutablePat(initCmt, it) }
     }

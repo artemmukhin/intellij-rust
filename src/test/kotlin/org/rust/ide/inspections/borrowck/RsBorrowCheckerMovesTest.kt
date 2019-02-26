@@ -12,10 +12,6 @@ import org.rust.ide.inspections.RsInspectionsTestBase
 
 class RsBorrowCheckerMovesTest : RsInspectionsTestBase(RsBorrowCheckerInspection()) {
 
-    fun `test 123`() = checkByText("""
-        fn foo(x: i32) {}
-    """, checkWarn = true)
-
     fun `test move by call`() = checkByText("""
         struct S { data: i32 }
 

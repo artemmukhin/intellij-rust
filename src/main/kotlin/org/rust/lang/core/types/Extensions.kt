@@ -13,6 +13,7 @@ import com.intellij.psi.util.CachedValue
 import com.intellij.psi.util.CachedValueProvider.Result
 import com.intellij.psi.util.CachedValuesManager
 import com.intellij.psi.util.PsiModificationTracker
+import org.rust.lang.core.cfg.ControlFlowGraph
 import org.rust.lang.core.psi.*
 import org.rust.lang.core.psi.ext.*
 import org.rust.lang.core.resolve.ImplLookup
@@ -116,3 +117,21 @@ val RsInferenceContextOwner.borrowCheckResult: BorrowCheckResult?
 
 fun RsNamedElement?.asTy(): Ty =
     (this as? RsTypeDeclarationElement)?.declaredType ?: TyUnknown
+
+private val CONTROL_FLOW_KEY: Key<CachedValue<ControlFlowGraph>> = Key.create("CONTROL_FLOW_KEY")
+
+val RsInferenceContextOwner.controlFlowGraph: ControlFlowGraph?
+    get() = CachedValuesManager.getCachedValue(this, CONTROL_FLOW_KEY) {
+        val cfg = (body as? RsBlock)?.let { ControlFlowGraph.buildFor(it) }
+        createResult(cfg)
+    }
+
+
+private val LIVENESS_ANALYSIS_RESULT: Key<CachedValue<LivenessAnalysisResult>> = Key.create("LIVENESS_ANALYSIS_RESULT")
+
+val RsInferenceContextOwner.livenessAnalysisResult: LivenessAnalysisResult?
+    get() = CachedValuesManager.getCachedValue(this, LIVENESS_ANALYSIS_RESULT) {
+        val livenessContext = LivenessContext.buildFor(this)
+        val livenessResult = livenessContext?.check()
+        createResult(livenessResult)
+    }
