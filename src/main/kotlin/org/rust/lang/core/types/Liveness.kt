@@ -102,7 +102,6 @@ class GatherLivenessContext(
         livenessData.addDeclaration(path, element)
     }
 
-    // почему вызывается для параметра? fn foo(`par <-- mutate`: i32)
     override fun mutate(assignmentElement: RsElement, assigneeCmt: Cmt, mode: MutateMode) {
         val path = livenessData.usagePathOf(assigneeCmt) ?: return
         when (mode) {
@@ -125,10 +124,7 @@ class GatherLivenessContext(
 
 class CheckLiveness(
     val bccx: BorrowCheckContext,
-    val flowedLivenessData: FlowedLivenessData,
-    val unusedArguments: MutableList<RsElement> = mutableListOf(),
-    val unusedVariables: MutableList<RsElement> = mutableListOf(),
-    val deadAssignments: MutableList<RsElement> = mutableListOf()
+    val flowedLivenessData: FlowedLivenessData
 ) : Delegate {
     override fun consume(element: RsElement, cmt: Cmt, mode: ConsumeMode) {
     }
@@ -158,11 +154,8 @@ class CheckLiveness(
                         bccx.reportUnusedArgument(kind.declaration)
                     }
                 }
-                MutateMode.JustWrite -> deadAssignments.add(assignmentElement)
-                MutateMode.WriteAndRead -> {
-                    // TODO
-                    bccx.reportDeadAssignment(assignmentElement)
-                }
+                MutateMode.JustWrite -> bccx.reportDeadAssignment(assignmentElement)
+                MutateMode.WriteAndRead -> bccx.reportDeadAssignment(assignmentElement)
             }
         }
     }
