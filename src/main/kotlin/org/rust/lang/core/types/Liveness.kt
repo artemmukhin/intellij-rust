@@ -32,9 +32,36 @@ object LiveDataFlowOperator : DataFlowOperator {
 typealias LivenessDataFlow = DataFlowContext<LiveDataFlowOperator>
 
 class FlowedLivenessData(
-    private val livenessData: LivenessData,
-    private val dfcxLiveness: LivenessDataFlow
+    val livenessData: LivenessData,
+    val dfcxLiveness: LivenessDataFlow
 ) {
+    fun isPathUsed(element: RsElement, usagePath: UsagePath): Boolean {
+        val baseNodes = livenessData.existingBasePaths(usagePath)
+
+        // Good scenarios:
+        // 1. Assign to `a.b.c`, use of `a.b.c`
+        // 2. Assign to `a.b.c`, use of `a` or `a.b`
+        // 3. Assign to `a.b.c`, use of `a.b.c.d`
+        //
+        // Bad scenario:
+        // 4. Assign to `a.b.c`, use of `a.b.d`
+        var isNotUsed = true
+        dfcxLiveness.eachBitOnExit(element) { index ->
+            val usage = livenessData.usages[index]
+            val path = usage.path
+            // Scenario 1 or 2: `usagePath` or some base path of `usagePath` was used
+            if (baseNodes.any { it == path }) {
+                isNotUsed = false
+            } else {
+                // Scenario 3: some extension of `loanPath` was moved
+                val eachBasePathIsNotUsed = !livenessData.eachBasePath(path) { it != path }
+                if (!eachBasePathIsNotUsed) isNotUsed = false
+            }
+            isNotUsed
+        }
+        return !isNotUsed
+    }
+
     companion object {
         fun buildFor(livenessData: LivenessData, cfg: ControlFlowGraph): FlowedLivenessData {
             val dfcxLiveness = DataFlowContext(cfg, LiveDataFlowOperator, livenessData.paths.size)
@@ -105,17 +132,13 @@ class GatherLivenessContext(
     override fun mutate(assignmentElement: RsElement, assigneeCmt: Cmt, mode: MutateMode) {
         val path = livenessData.usagePathOf(assigneeCmt) ?: return
         when (mode) {
-            MutateMode.Init, MutateMode.JustWrite -> livenessData.addAssignment(path, assignmentElement)
+            MutateMode.Init -> livenessData.addDeclaration(path, assignmentElement)
+            MutateMode.JustWrite -> livenessData.addAssignment(path, assignmentElement)
             MutateMode.WriteAndRead -> {
                 livenessData.addUsage(path, assignmentElement)
                 livenessData.addAssignment(path, assignmentElement)
             }
         }
-    }
-
-    override fun usage(element: RsElement, cmt: Cmt) {
-//        val path = livenessData.usagePathOf(cmt) ?: return
-//        livenessData.addUsage(path, element)
     }
 
     fun gather(): LivenessData {
@@ -125,7 +148,13 @@ class GatherLivenessContext(
     }
 }
 
-class CheckLiveness(val bccx: BorrowCheckContext, val flowedLivenessData: FlowedLivenessData) : Delegate {
+class CheckLiveness(
+    val bccx: BorrowCheckContext,
+    val flowedLivenessData: FlowedLivenessData,
+    val unusedArguments: MutableList<RsElement> = mutableListOf(),
+    val unusedVariables: MutableList<RsElement> = mutableListOf(),
+    val deadAssignments: MutableList<RsElement> = mutableListOf()
+) : Delegate {
     override fun consume(element: RsElement, cmt: Cmt, mode: ConsumeMode) {
     }
 
@@ -136,12 +165,26 @@ class CheckLiveness(val bccx: BorrowCheckContext, val flowedLivenessData: Flowed
     }
 
     override fun declarationWithoutInit(element: RsElement) {
+        //
     }
 
     override fun mutate(assignmentElement: RsElement, assigneeCmt: Cmt, mode: MutateMode) {
-    }
+        val path = flowedLivenessData.livenessData.usagePathOf(assigneeCmt) ?: return
+        val isUsed = flowedLivenessData.isPathUsed(assignmentElement, path)
 
-    override fun usage(element: RsElement, cmt: Cmt) {
+        if (!isUsed) {
+            val kind = path.kind
+            when (mode) {
+                MutateMode.Init -> if (kind is UsagePathKind.Var) {
+                    unusedVariables.add(kind.declaration)
+                }
+                MutateMode.JustWrite -> deadAssignments.add(assignmentElement)
+                MutateMode.WriteAndRead -> {
+                    // TODO
+                    deadAssignments.add(assignmentElement)
+                }
+            }
+        }
     }
 
     fun check(bccx: BorrowCheckContext) {
@@ -174,8 +217,6 @@ class UsagePath(
         }
      */
 }
-
-class Usage(val path: UsagePath, val element: RsElement)
 
 sealed class UsagePathKind {
     /** [Var] kind relates to [Categorization.Local] memory category */
@@ -220,6 +261,7 @@ sealed class UsagePathKind {
     }
 }
 
+data class Usage(val path: UsagePath, val element: RsElement)
 data class Declaration(val path: UsagePath, val element: RsElement)
 data class Assignment(val path: UsagePath, val element: RsElement)
 
@@ -261,8 +303,22 @@ class LivenessData(
         return paths.last()
     }
 
-    /*
-    private fun eachExtendingPath(usagePath: UsagePath, action: (UsagePath) -> Boolean): Boolean {
+    fun existingBasePaths(usagePath: UsagePath): List<UsagePath> {
+        val result = mutableListOf<UsagePath>()
+        eachBasePath(usagePath) { result.add(it) }
+        return result
+    }
+
+    fun eachBasePath(usagePath: UsagePath, predicate: (UsagePath) -> Boolean): Boolean {
+        var path = usagePath
+        while (true) {
+            if (!predicate(path)) return false
+            path = path.parent ?: return true
+        }
+    }
+
+
+    fun eachExtendingPath(usagePath: UsagePath, action: (UsagePath) -> Boolean): Boolean {
         if (!action(usagePath)) return false
         var path = usagePath.firstChild
         while (path != null) {
@@ -271,6 +327,7 @@ class LivenessData(
         }
         return true
     }
+    /*
     private fun kill(usagePath: UsagePath, killElement: RsElement, dfcxLiveness: LivenessDataFlow) {
         if (!usagePath.isPrecise) return
 

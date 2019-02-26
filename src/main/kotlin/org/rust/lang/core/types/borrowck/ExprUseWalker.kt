@@ -46,8 +46,6 @@ interface Delegate {
 
     /** The path at [assigneeCmt] is being assigned to */
     fun mutate(assignmentElement: RsElement, assigneeCmt: Cmt, mode: MutateMode)
-
-    fun usage(element: RsElement, cmt: Cmt)
 }
 
 sealed class ConsumeMode {

@@ -86,6 +86,12 @@ class DataFlowContext<O : DataFlowOperator>(
         return nodes.all { eachBitForNode(EntryOrExit.Entry, it, predicate) }
     }
 
+    fun eachBitOnExit(element: RsElement, predicate: (Int) -> Boolean): Boolean {
+        if (!hasBitSetForElement(element)) return true
+        val nodes = getCfgNodes(element)
+        return nodes.all { eachBitForNode(EntryOrExit.Exit, it, predicate) }
+    }
+
     private fun eachBitForNode(e: EntryOrExit, node: CFGNode, predicate: (Int) -> Boolean): Boolean {
         if (bitsPerElement == 0) return true
 
