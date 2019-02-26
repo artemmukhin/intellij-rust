@@ -7,9 +7,26 @@ package org.rust.ide.inspections
 
 class RsLivenessTest : RsInspectionsTestBase(RsLivenessInspection()) {
 
-    fun `test unused argument empty body`() = checkByText("""
+    fun `test unused argument`() = checkByText("""
         fn foo(<warning descr="Unused parameter">x</warning>: i32) -> i32 {
             return 42;
+        }
+    """)
+
+    fun `test unused uninit variable`() = checkByText("""
+        fn foo() {
+            let <warning descr="Unused variable">x</warning>;
+            let y = 5;
+            y;
+        }
+    """)
+
+    fun `test dead assignment 1`() = checkByText("""
+        fn foo() -> i32 {
+            let mut x = 1;
+            let y = x * 2;
+            x = 42;
+            return y;
         }
     """)
 
@@ -39,14 +56,12 @@ class RsLivenessTest : RsInspectionsTestBase(RsLivenessInspection()) {
         }
     """)
 
-    fun `test use extending`() = checkByText("""
+    fun `test use extend 1`() = checkByText("""
         struct S { a: i32, b: i32 }
 
-        fn foo(par: i32) {
+        fn foo() {
             let x = S { a: 1, b: 2 };
-            if par > 0 {
-                x.a;
-            }
+            x.a;
         }
     """)
 }

@@ -49,9 +49,8 @@ class LivenessContext private constructor(
         val cfg = owner.controlFlowGraph ?: return null
         val livenessContext = GatherLivenessContext(this)
         val livenessData = livenessContext.gather()
-        val flowedLiveness = FlowedLivenessData.buildFor(livenessData, cfg)
-        val checkLiveness = CheckLiveness(this, flowedLiveness)
-        checkLiveness.check()
+        val flowedLiveness = FlowedLivenessData.buildFor(this, livenessData, cfg)
+        flowedLiveness.check()
         return LivenessAnalysisResult(unusedVariables, unusedArguments, deadAssignments)
     }
 
@@ -72,44 +71,80 @@ object LiveDataFlowOperator : DataFlowOperator {
 typealias LivenessDataFlow = DataFlowContext<LiveDataFlowOperator>
 
 class FlowedLivenessData(
+    val ctx: LivenessContext,
     val livenessData: LivenessData,
-    val dfcxLiveness: LivenessDataFlow
+    val dfcxLivePaths: LivenessDataFlow,
+    val dfcxLiveAssignments: LivenessDataFlow
 ) {
-    fun isPathUsed(usagePath: UsagePath): Boolean {
-        val basePaths = livenessData.existingBasePaths(usagePath)
-
-        // Good scenarios:
-        // 1. Assign to `a.b.c`, use of `a.b.c`
-        // 2. Assign to `a.b.c`, use of `a` or `a.b`
-        // 3. Assign to `a.b.c`, use of `a.b.c.d`
-        //
-        // Bad scenario:
-        // 4. Assign to `a.b.c`, use of `a.b.d`
+    fun isPathLive(usagePath: UsagePath): Boolean {
+        check(usagePath.kind is UsagePathKind.Var)
         var isDead = true
-        dfcxLiveness.eachBitAtFlowExit { index ->
+        dfcxLivePaths.eachBitAtFlowExit { index ->
             val path = livenessData.paths[index]
-            // Scenario 1 or 2: `usagePath` or some base path of `usagePath` was used
-            if (basePaths.any { it == path }) {
+            // declaration of `a`, use of `a`
+            if (usagePath == path) {
                 isDead = false
             } else {
-                // Scenario 3: some extension of `loanPath` was moved
-                val eachBasePathIsNotUsed = !livenessData.eachBasePath(path) { it != path }
-                if (!eachBasePathIsNotUsed) isDead = false
+                // declaration of `a`, use of `a.b.c`
+                val isEachExtensionDead = livenessData.eachBasePath(path) { it != usagePath }
+                if (!isEachExtensionDead) isDead = false
             }
             isDead
         }
         return !isDead
     }
 
+    fun isAssignmentLive(assignment: Assignment): Boolean {
+        var isDead = true
+        val usagePath = assignment.path
+        dfcxLiveAssignments.eachBitAtFlowExit { index ->
+            val path = livenessData.paths[index]
+            // declaration of `a`, use of `a`
+            if (usagePath == path) {
+                isDead = false
+            } else {
+                // declaration of `a`, use of `a.b.c`
+                val isEachExtensionDead = livenessData.eachBasePath(path) { it != usagePath }
+                if (!isEachExtensionDead) isDead = false
+            }
+            isDead
+        }
+        return !isDead
+    }
+
+    fun check() {
+        livenessData.paths
+            .filter { it.kind is UsagePathKind.Var }
+            .filter { !isPathLive(it) }
+            .map { it.kind }
+            .forEach { kind ->
+                if (kind is UsagePathKind.Var) {
+                    val declaration = kind.declaration
+                    if (declaration.ancestorOrSelf<RsLetDecl>() != null) {
+                        ctx.reportUnusedVariable(kind.declaration)
+                    } else if (declaration.ancestorOrSelf<RsValueParameter>() != null) {
+                        ctx.reportUnusedArgument(kind.declaration)
+                    }
+                }
+            }
+
+        livenessData.assignments
+            .filter { !isAssignmentLive(it) }
+            .forEach {
+                ctx.reportDeadAssignment(it.element)
+            }
+    }
+
     companion object {
-        fun buildFor(livenessData: LivenessData, cfg: ControlFlowGraph): FlowedLivenessData {
-            val dfcxLiveness = DataFlowContext(cfg, LiveDataFlowOperator, livenessData.paths.size)
+        fun buildFor(ctx: LivenessContext, livenessData: LivenessData, cfg: ControlFlowGraph): FlowedLivenessData {
+            val dfcxLivePaths = DataFlowContext(cfg, LiveDataFlowOperator, livenessData.paths.size)
+            val dfcxLiveAssignments = DataFlowContext(cfg, LiveDataFlowOperator, livenessData.paths.size)
 
-            livenessData.addGenKills(dfcxLiveness)
-            dfcxLiveness.addKillsFromFlowExits()
-            dfcxLiveness.propagate()
+            livenessData.addGenKills(dfcxLivePaths, dfcxLiveAssignments)
+            dfcxLivePaths.addKillsFromFlowExits()
+            dfcxLivePaths.propagate()
 
-            return FlowedLivenessData(livenessData, dfcxLiveness)
+            return FlowedLivenessData(ctx, livenessData, dfcxLivePaths, dfcxLiveAssignments)
         }
     }
 }
@@ -161,26 +196,6 @@ class GatherLivenessContext(
     }
 }
 
-class CheckLiveness(
-    val ctx: LivenessContext,
-    val flowedLivenessData: FlowedLivenessData
-) {
-    fun check() {
-        for (path in flowedLivenessData.livenessData.paths) {
-            if (flowedLivenessData.isPathUsed(path)) continue
-            val kind = path.kind
-            if (kind is UsagePathKind.Var) {
-                val declaration = kind.declaration
-                if (declaration.ancestorOrSelf<RsLetDecl>() != null) {
-                    ctx.reportUnusedVariable(kind.declaration)
-                } else if (declaration.ancestorOrSelf<RsValueParameter>() != null) {
-                    ctx.reportUnusedArgument(kind.declaration)
-                }
-            }
-        }
-    }
-}
-
 class UsagePath(
     val kind: UsagePathKind,
     val index: Int,
@@ -193,17 +208,6 @@ class UsagePath(
 
     override fun hashCode(): Int =
         kind.hashCode()
-
-    /*
-    val isVariablePath: Boolean
-        get() = parent == null
-
-    val isPrecise: Boolean
-        get() = when (kind) {
-            is UsagePathKind.Var -> true
-            is UsagePathKind.Extend -> kind.isInterior
-        }
-     */
 }
 
 sealed class UsagePathKind {
@@ -266,13 +270,11 @@ class LivenessData(
     fun usagePathOf(kind: UsagePathKind): UsagePath? {
         pathMap[kind]?.let { return it }
 
-        val oldSize = when (kind) {
+        when (kind) {
             is UsagePathKind.Var -> {
                 val index = paths.size
                 paths.add(UsagePath(kind, index))
-                index
             }
-
             is UsagePathKind.Extend -> {
                 val index = paths.size
                 val baseKind = kind.baseKind
@@ -280,11 +282,9 @@ class LivenessData(
                 val newMovePath = UsagePath(kind, index, parentPath, null, parentPath.firstChild)
                 parentPath.firstChild = newMovePath
                 paths.add(newMovePath)
-                index
             }
         }
 
-        // testAssert { oldSize == paths.size - 1 }
         pathMap[kind] = paths.last()
         return paths.last()
     }
@@ -303,17 +303,18 @@ class LivenessData(
         }
     }
 
-    fun addGenKills(dfcxLiveness: LivenessDataFlow) {
-        usages.forEach { usage ->
+    fun addGenKills(dfcxLiveness: LivenessDataFlow, dfcxLiveAssignments: LivenessDataFlow) {
+        usages.forEachIndexed { index, usage ->
             dfcxLiveness.addGen(usage.element, usage.path.index)
+            dfcxLiveAssignments.addGen(usage.element, usage.path.index) // TODO: or use index?
         }
 
         declarations.forEach { declaration ->
             dfcxLiveness.addKill(KillFrom.ScopeEnd, declaration.element, declaration.path.index)
         }
 
-        assignments.forEach { assignment ->
-            dfcxLiveness.addKill(KillFrom.Execution, assignment.element, assignment.path.index)
+        assignments.forEachIndexed { index, assignment ->
+            dfcxLiveAssignments.addKill(KillFrom.Execution, assignment.element, assignment.path.index)
         }
     }
 
