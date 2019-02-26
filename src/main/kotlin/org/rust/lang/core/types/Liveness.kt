@@ -45,7 +45,8 @@ class FlowedLivenessData(
         // Bad scenario:
         // 4. Assign to `a.b.c`, use of `a.b.d`
         var isNotUsed = true
-        dfcxLiveness.eachBitOnExit(element) { index ->
+        // TODO: entry or exit?
+        dfcxLiveness.eachBitOnEntry(element) { index ->
             val usage = livenessData.usages[index]
             val path = usage.path
             // Scenario 1 or 2: `usagePath` or some base path of `usagePath` was used
@@ -73,32 +74,6 @@ class FlowedLivenessData(
         }
     }
 }
-
-class LivenessResult(
-    val unusedArguments: List<RsElement>,
-    val unusedVariables: List<RsElement>,
-    val deadAssignments: List<RsElement>
-)
-
-/*
-class GatherLivenessContext(
-    val bccx: BorrowCheckContext,
-    val livenessData: LivenessData = LivenessData(),
-    val gatherLiveness: GatherLiveness = GatherLiveness(livenessData),
-    val checkLiveness: CheckLiveness = CheckLiveness(livenessData),
-//    val unusedArguments: MutableList<RsElement> = mutableListOf(),
-//    val unusedVariables: MutableList<RsElement> = mutableListOf(),
-//    val deadAssignments: MutableList<RsElement> = mutableListOf()
-) {
-    fun build(): LivenessData {
-        val mc = MemoryCategorizationContext(bccx.implLookup, bccx.owner.inference)
-        val gatherVisitor = ExprUseWalker(gatherLiveness, MemoryCategorizationContext(bccx.implLookup, bccx.owner.inference))
-        gatherVisitor.consumeBody(bccx.body)
-
-        return gatherLiveness.livenessData
-    }
-}
- */
 
 class GatherLivenessContext(
     val bccx: BorrowCheckContext,
@@ -131,7 +106,8 @@ class GatherLivenessContext(
     override fun mutate(assignmentElement: RsElement, assigneeCmt: Cmt, mode: MutateMode) {
         val path = livenessData.usagePathOf(assigneeCmt) ?: return
         when (mode) {
-            MutateMode.Init -> livenessData.addDeclaration(path, assignmentElement)
+            MutateMode.Init -> { /* livenessData.addDeclaration(path, assignmentElement) */
+            }
             MutateMode.JustWrite -> livenessData.addAssignment(path, assignmentElement)
             MutateMode.WriteAndRead -> {
                 livenessData.addUsage(path, assignmentElement)
@@ -321,39 +297,17 @@ class LivenessData(
         }
     }
 
-
-    fun eachExtendingPath(usagePath: UsagePath, action: (UsagePath) -> Boolean): Boolean {
-        if (!action(usagePath)) return false
-        var path = usagePath.firstChild
-        while (path != null) {
-            if (!eachExtendingPath(path, action)) return false
-            path = path.nextSibling
-        }
-        return true
-    }
-    /*
-    private fun kill(usagePath: UsagePath, killElement: RsElement, dfcxLiveness: LivenessDataFlow) {
-        if (!usagePath.isPrecise) return
-
-        dfcxLiveness.addKill(KillFrom.Execution, killElement, usagePath.index)
-        eachExtendingPath(usagePath) { path ->
-            dfcxLiveness.addKill(KillFrom.Execution, killElement, path.index)
-            true
-        }
-    }
-     */
-
     fun addGenKills(dfcxLiveness: LivenessDataFlow) {
-        for (usage in usages) {
-            dfcxLiveness.addGen(usage.element, usage.path.index)
+        usages.forEachIndexed { i, usage ->
+            dfcxLiveness.addGen(usage.element, i)
         }
 
-        for (declaration in declarations) {
-            dfcxLiveness.addKill(KillFrom.ScopeEnd, declaration.element, declaration.path.index)
+        declarations.forEachIndexed { i, declaration ->
+            dfcxLiveness.addKill(KillFrom.ScopeEnd, declaration.element, i)
         }
 
-        for (assignment in assignments) {
-            dfcxLiveness.addKill(KillFrom.Execution, assignment.element, assignment.path.index)
+        assignments.forEachIndexed { i, assignment ->
+            dfcxLiveness.addKill(KillFrom.Execution, assignment.element, i)
         }
     }
 

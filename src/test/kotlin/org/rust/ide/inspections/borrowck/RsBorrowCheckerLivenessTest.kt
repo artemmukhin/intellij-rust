@@ -12,8 +12,10 @@ import org.rust.ide.inspections.RsInspectionsTestBase
 
 class RsBorrowCheckerLivenessTest : RsInspectionsTestBase(RsBorrowCheckerInspection()) {
 
-    fun `test unused arguments empty body`() = checkByText("""
-        fn foo(<warning descr="Unused parameter">x</warning>: i32, <warning descr="Unused parameter">y</warning>: String) {}
+    fun `test unused argument empty body`() = checkByText("""
+        fn foo(<warning descr="Unused parameter">x</warning>: i32) -> i32 {
+            return 42;
+        }
     """, checkWarn = true)
 
     fun `test simple used argument`() = checkByText("""
