@@ -25,7 +25,7 @@ class RsLivenessTest : RsInspectionsTestBase(RsLivenessInspection()) {
         fn foo() -> i32 {
             let mut x = 1;
             let y = x * 2;
-            x = 42;
+            <warning descr="Dead assignment">x = 42</warning>;
             return y;
         }
     """)
