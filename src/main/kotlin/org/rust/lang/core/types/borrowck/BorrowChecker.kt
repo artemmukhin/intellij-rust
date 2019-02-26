@@ -27,7 +27,9 @@ class BorrowCheckContext(
     private val usesOfMovedValue: MutableList<UseOfMovedValueError> = mutableListOf(),
     private val usesOfUninitializedVariable: MutableList<UseOfUninitializedVariable> = mutableListOf(),
     private val moveErrors: MutableList<MoveError> = mutableListOf(),
-    private val unusedVariables: MutableList<RsElement> = mutableListOf()
+    private val unusedVariables: MutableList<RsElement> = mutableListOf(),
+    private val unusedArguments: MutableList<RsElement> = mutableListOf(),
+    private val deadAssignments: MutableList<RsElement> = mutableListOf()
 ) {
     companion object {
         fun buildFor(owner: RsInferenceContextOwner): BorrowCheckContext? {
@@ -46,7 +48,14 @@ class BorrowCheckContext(
             val checkLiveness = CheckLiveness(this, data.flowedLiveness)
             checkLiveness.check(this)
         }
-        return BorrowCheckResult(usesOfMovedValue, usesOfUninitializedVariable, moveErrors, unusedVariables)
+        return BorrowCheckResult(
+            usesOfMovedValue,
+            usesOfUninitializedVariable,
+            moveErrors,
+            unusedVariables,
+            unusedArguments,
+            deadAssignments
+        )
     }
 
     private fun buildAnalysisData(bccx: BorrowCheckContext): AnalysisData? {
@@ -77,6 +86,14 @@ class BorrowCheckContext(
     fun reportUnusedVariable(element: RsElement) {
         unusedVariables.add(element)
     }
+
+    fun reportUnusedArgument(element: RsElement) {
+        unusedArguments.add(element)
+    }
+
+    fun reportDeadAssignment(element: RsElement) {
+        deadAssignments.add(element)
+    }
 }
 
 class AnalysisData(val moveData: FlowedMoveData, val flowedLiveness: FlowedLivenessData)
@@ -85,7 +102,9 @@ data class BorrowCheckResult(
     val usesOfMovedValue: List<UseOfMovedValueError>,
     val usesOfUninitializedVariable: List<UseOfUninitializedVariable>,
     val moveErrors: List<MoveError>,
-    val unusedVariables: MutableList<RsElement>
+    val unusedVariables: List<RsElement>,
+    val unusedArguments: List<RsElement>,
+    val deadAssignments: List<RsElement>
 )
 
 class UseOfMovedValueError(val use: RsElement, val move: Move)

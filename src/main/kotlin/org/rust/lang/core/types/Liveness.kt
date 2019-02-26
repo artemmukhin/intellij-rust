@@ -9,11 +9,10 @@ import org.rust.lang.core.DataFlowContext
 import org.rust.lang.core.DataFlowOperator
 import org.rust.lang.core.KillFrom
 import org.rust.lang.core.cfg.ControlFlowGraph
-import org.rust.lang.core.psi.RsExpr
-import org.rust.lang.core.psi.RsPat
-import org.rust.lang.core.psi.RsPatBinding
+import org.rust.lang.core.psi.*
 import org.rust.lang.core.psi.ext.RsElement
 import org.rust.lang.core.psi.ext.RsItemElement
+import org.rust.lang.core.psi.ext.ancestorOrSelf
 import org.rust.lang.core.psi.ext.descendantsOfType
 import org.rust.lang.core.types.borrowck.*
 import org.rust.lang.core.types.infer.Categorization
@@ -176,12 +175,17 @@ class CheckLiveness(
             val kind = path.kind
             when (mode) {
                 MutateMode.Init -> if (kind is UsagePathKind.Var) {
-                    unusedVariables.add(kind.declaration)
+                    val declaration = kind.declaration
+                    if (declaration.ancestorOrSelf<RsLetDecl>() != null) {
+                        bccx.reportUnusedVariable(kind.declaration)
+                    } else if (declaration.ancestorOrSelf<RsValueParameter>() != null) {
+                        bccx.reportUnusedArgument(kind.declaration)
+                    }
                 }
                 MutateMode.JustWrite -> deadAssignments.add(assignmentElement)
                 MutateMode.WriteAndRead -> {
                     // TODO
-                    deadAssignments.add(assignmentElement)
+                    bccx.reportDeadAssignment(assignmentElement)
                 }
             }
         }
