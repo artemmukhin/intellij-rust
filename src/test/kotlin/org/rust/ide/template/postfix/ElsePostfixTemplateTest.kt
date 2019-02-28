@@ -112,7 +112,7 @@ class ElsePostfixTemplateTest : RsPostfixTemplateTest(ElseExpressionPostfixTempl
             Pair("1 < 2", "1 >= 2"),
             Pair("1 > 2", "1 <= 2"),
             Pair("!(1 == 2)", "1 == 2"),
-            Pair("(1 == 2)", "!(1 == 2)")
+            Pair("(1 == 2)", "1 != 2")
         )
 
         for (case in cases) {

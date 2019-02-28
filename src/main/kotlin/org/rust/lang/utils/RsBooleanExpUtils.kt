@@ -8,7 +8,8 @@ package org.rust.lang.utils
 import com.intellij.psi.PsiElement
 import org.rust.lang.core.psi.*
 import org.rust.lang.core.psi.ext.ComparisonOp.*
-import org.rust.lang.core.psi.ext.EqualityOp.*
+import org.rust.lang.core.psi.ext.EqualityOp.EQ
+import org.rust.lang.core.psi.ext.EqualityOp.EXCLEQ
 import org.rust.lang.core.psi.ext.operatorType
 
 fun RsBinaryExpr.negateToString(): String {
@@ -30,17 +31,20 @@ fun PsiElement.isNegation(): Boolean =
     this is RsUnaryExpr && excl != null
 
 fun PsiElement.negate(): PsiElement {
-    val psiFactory = RsPsiFactory(project)
-    return when {
-        isNegation() -> {
-            val inner = (this as RsUnaryExpr).expr!!
-            (inner as? RsParenExpr)?.expr ?: inner
-        }
+    if (isNegation()) {
+        val inner = (this as RsUnaryExpr).expr!!
+        return (inner as? RsParenExpr)?.expr ?: inner
+    }
 
-        this is RsBinaryExpr ->
+    val psiFactory = RsPsiFactory(project)
+    return when (this) {
+        is RsBinaryExpr ->
             psiFactory.createExpression(negateToString())
 
-        this is RsParenExpr || this is RsPathExpr || this is RsCallExpr ->
+        is RsParenExpr ->
+            psiFactory.createExpression(expr.negate().text)
+
+        is RsPathExpr, is RsCallExpr ->
             psiFactory.createExpression("!$text")
 
         else ->
