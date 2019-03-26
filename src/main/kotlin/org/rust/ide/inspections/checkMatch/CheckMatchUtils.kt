@@ -42,7 +42,7 @@ private val RsExpr.value: Constant
                 null -> Constant.Unknown
             }
         }
-        is RsPathExpr -> Constant.Path(this)
+        is RsPathExpr -> TODO()
         is RsUnaryExpr -> TODO()
         else -> TODO()
     }

@@ -5,6 +5,8 @@
 
 package org.rust.ide.inspections
 
+import org.rust.ProjectDescriptor
+import org.rust.WithStdlibRustProjectDescriptor
 import org.rust.ide.inspections.checkMatch.RsMatchCheckInspection
 
 class RsMatchCheckInspectionTest : RsInspectionsTestBase(RsMatchCheckInspection()) {
@@ -456,6 +458,20 @@ class RsMatchCheckInspectionTest : RsInspectionsTestBase(RsMatchCheckInspection(
             match &e {
                 &B => {}
                 &A(x) => {}
+            }
+        }
+    """)
+
+    @ProjectDescriptor(WithStdlibRustProjectDescriptor::class)
+    fun `test match const in range`() = checkByText("""
+        const MAX: usize = 10;
+
+        fn main() {
+            let v = vec![1, 2, 3];
+            match v.len() {
+                1 => { println ! ("1"); }
+                2...MAX => { println ! ("2...MAX"); }
+                _ => { println ! ("other"); }
             }
         }
     """)
