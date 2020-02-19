@@ -14,8 +14,10 @@ import com.intellij.openapi.actionSystem.DefaultActionGroup
 import com.intellij.openapi.actionSystem.impl.SimpleDataContext
 import com.intellij.openapi.application.runWriteAction
 import com.intellij.openapi.editor.markup.GutterIconRenderer.Alignment
+import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.ui.popup.JBPopup
 import com.intellij.openapi.ui.popup.JBPopupFactory
+import com.intellij.psi.PsiDocumentManager
 import com.intellij.psi.PsiElement
 import com.intellij.ui.awt.RelativePoint
 import org.rust.cargo.project.model.cargoProjects
@@ -98,7 +100,10 @@ class CargoFeatureLineMarkerProvider : LineMarkerProvider {
         val toggleFeature = {
             val oldState = cargoPackage.features.state.getOrDefault(name, FeatureState.Disabled).toBoolean()
             val newState = !oldState
-            cargoProjectsService.updateFeature(cargoProject, cargoPackage, name, newState)
+            val tomlFile = element.containingFile as TomlFile
+            val tomlDoc = PsiDocumentManager.getInstance(cargoProject.project).getDocument(tomlFile)!!
+            val isDocUnsaved = FileDocumentManager.getInstance().isDocumentUnsaved(tomlDoc)
+            cargoProjectsService.updateFeature(cargoProject, cargoPackage, name, newState, isDocUnsaved)
             cargoPackage.syncFeature(name, newState)
         }
 
@@ -176,8 +181,8 @@ private class FeaturesSettingsCheckboxAction(
     }
 
     override fun actionPerformed(e: AnActionEvent) {
-        cargoPackage.syncAllFeatures(selectAll)
-        cargoProjectsService.toggleAllFeatures(cargoProject, selectAll)
+        cargoProjectsService.toggleAllFeatures(cargoProject, cargoPackage.rootDirectory.toString(), selectAll)
+//        cargoPackage.syncAllFeatures(selectAll)
 
         runWriteAction {
             DaemonCodeAnalyzer.getInstance(cargoProject.project).restart()
