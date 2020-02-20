@@ -95,8 +95,8 @@ class CargoFeatureLineMarkerProvider : LineMarkerProvider {
             val tomlFile = element.containingFile as TomlFile
             val tomlDoc = PsiDocumentManager.getInstance(cargoProject.project).getDocument(tomlFile)
             val isDocUnsaved = tomlDoc?.let { FileDocumentManager.getInstance().isDocumentUnsaved(it) } ?: true
-            val pkgContentRoot = cargoPackage.rootDirectory.toString()
-            cargoProjectsService.updateFeature(cargoProject, pkgContentRoot, name, newState, isDocUnsaved)
+            val pkgRootDir = cargoPackage.rootDirectory.toString()
+            cargoProjectsService.updateFeature(cargoProject, pkgRootDir, name, newState, isDocUnsaved)
         }
 
         return when (cargoPackage.origin) {
@@ -184,8 +184,8 @@ private class FeaturesSettingsCheckboxAction(
     }
 
     override fun actionPerformed(e: AnActionEvent) {
-        cargoProjectsService.updateAllFeatures(cargoProject, cargoPackage.rootDirectory.toString(), selectAll)
-//        cargoPackage.syncAllFeatures(selectAll)
+        val pkgRootDir = cargoPackage.rootDirectory.toString()
+        cargoProjectsService.updateAllFeatures(cargoProject, pkgRootDir, selectAll)
 
         runWriteAction {
             DaemonCodeAnalyzer.getInstance(cargoProject.project).restart()

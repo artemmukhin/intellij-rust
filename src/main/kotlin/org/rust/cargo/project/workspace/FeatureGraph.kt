@@ -53,7 +53,11 @@ class FeatureGraph private constructor(
         graph.forEachNode { add(it.data.name) }
     }
 
+    val currentDeps: MutableList<String> = mutableListOf()
+
     fun updateAllFeatures(state: FeatureState) {
+        currentDeps.clear()
+
         when (state) {
             Enabled -> graph.forEachNode(::enableFeature)
             Disabled -> graph.forEachNode(::disableFeature)
@@ -61,8 +65,9 @@ class FeatureGraph private constructor(
     }
 
     fun updateFeature(feature: String, state: FeatureState) {
-        val node = featureToNode[feature] ?: return
+        currentDeps.clear()
 
+        val node = featureToNode[feature] ?: return
         when (state) {
             Enabled -> enableFeatureTransitively(node)
             Disabled -> disableFeatureTransitively(node)
@@ -85,15 +90,22 @@ class FeatureGraph private constructor(
             val dependant = edge.target
             disableFeatureTransitively(dependant)
         }
-        // TODO: probably also disable some unnecessary IN edges?
     }
 
     private fun enableFeature(node: FeatureNode) {
-        node.data.state = Enabled
+        if (node.data.name.contains("/")) {
+            currentDeps += node.data.name
+        } else {
+            node.data.state = Enabled
+        }
     }
 
     private fun disableFeature(node: FeatureNode) {
-        node.data.state = Disabled
+        if (node.data.name.contains("/")) {
+            currentDeps += node.data.name
+        } else {
+            node.data.state = Disabled
+        }
     }
 
     companion object {

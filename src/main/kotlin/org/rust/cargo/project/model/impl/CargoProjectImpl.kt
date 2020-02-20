@@ -278,6 +278,14 @@ open class CargoProjectsServiceImpl(
                 } else {
                     pkg?.syncAllFeatures(newState)
                 }
+                val depFeatures = pkg?.features?.currentDeps.orEmpty()
+                for (depFeature in depFeatures) {
+                    val depPkgName = depFeature.substringBeforeLast("/")
+                    val depFeatureName = depFeature.substringAfterLast("/")
+                    val ws = projects.first { it.manifest == cargoProject.manifest }.workspace
+                    val depPkg = ws?.findPackage(depPkgName)
+                    depPkg?.syncFeature(depFeatureName, newState)
+                }
             }
 
             ApplicationManager.getApplication().invokeAndWait {
