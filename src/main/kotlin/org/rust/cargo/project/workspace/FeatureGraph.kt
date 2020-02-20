@@ -53,10 +53,10 @@ class FeatureGraph private constructor(
         graph.forEachNode { add(it.data.name) }
     }
 
-    fun updateSetting(selectAll: Boolean) {
-        when (selectAll) {
-            true -> graph.forEachNode(::enableFeature)
-            false -> graph.forEachNode(::disableFeature)
+    fun updateAllFeatures(state: FeatureState) {
+        when (state) {
+            Enabled -> graph.forEachNode(::enableFeature)
+            Disabled -> graph.forEachNode(::disableFeature)
         }
     }
 

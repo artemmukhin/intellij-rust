@@ -25,7 +25,7 @@ import org.rust.cargo.project.model.impl.CargoProjectImpl
 import org.rust.cargo.project.model.impl.CargoProjectsServiceImpl
 import org.rust.cargo.project.workspace.CargoWorkspace
 import org.rust.cargo.project.workspace.FeatureState
-import org.rust.cargo.project.workspace.PackageOrigin
+import org.rust.cargo.project.workspace.PackageOrigin.WORKSPACE
 import org.rust.ide.icons.RsIcons
 import org.rust.lang.core.psi.ext.findCargoPackage
 import org.rust.lang.core.psi.ext.findCargoProject
@@ -56,29 +56,21 @@ class CargoFeatureLineMarkerProvider : LineMarkerProvider {
             val lastName = element.header.names.lastOrNull() ?: continue
             if (!lastName.isFeaturesKey) continue
 
-            if (cargoPackage.origin == PackageOrigin.WORKSPACE) {
-                // sync old state
-                val userOverriddenFeatures = cargoProject.userOverriddenFeatures[cargoPackage.toString()].orEmpty()
-                for ((feature, state) in userOverriddenFeatures) {
-                    cargoPackage.syncFeature(feature, state)
-                }
-
-                for (entry in element.entries) {
-                    val featureName = entry.key.text
-                    val featureLineMarkerInfo = genFeatureLineMarkerInfo(
-                        entry.key,
-                        featureName,
-                        features[featureName],
-                        cargoProject,
-                        cargoProjectsService,
-                        cargoPackage
-                    )
-                    result.add(featureLineMarkerInfo)
-                }
-
-                val settingsLineMarkerInfo = genSettingsLineMarkerInfo(element.header, cargoProjectsService)
-                result.add(settingsLineMarkerInfo)
+            for (entry in element.entries) {
+                val featureName = entry.key.text
+                val featureLineMarkerInfo = genFeatureLineMarkerInfo(
+                    entry.key,
+                    featureName,
+                    features[featureName],
+                    cargoProject,
+                    cargoProjectsService,
+                    cargoPackage
+                )
+                result.add(featureLineMarkerInfo)
             }
+
+            val settingsLineMarkerInfo = genSettingsLineMarkerInfo(element.header, cargoProjectsService)
+            result.add(settingsLineMarkerInfo)
         }
     }
 
@@ -101,20 +93,31 @@ class CargoFeatureLineMarkerProvider : LineMarkerProvider {
             val oldState = cargoPackage.features.state.getOrDefault(name, FeatureState.Disabled).toBoolean()
             val newState = !oldState
             val tomlFile = element.containingFile as TomlFile
-            val tomlDoc = PsiDocumentManager.getInstance(cargoProject.project).getDocument(tomlFile)!!
-            val isDocUnsaved = FileDocumentManager.getInstance().isDocumentUnsaved(tomlDoc)
-            cargoProjectsService.updateFeature(cargoProject, cargoPackage, name, newState, isDocUnsaved)
-            cargoPackage.syncFeature(name, newState)
+            val tomlDoc = PsiDocumentManager.getInstance(cargoProject.project).getDocument(tomlFile)
+            val isDocUnsaved = tomlDoc?.let { FileDocumentManager.getInstance().isDocumentUnsaved(it) } ?: true
+            val pkgContentRoot = cargoPackage.rootDirectory.toString()
+            cargoProjectsService.updateFeature(cargoProject, pkgContentRoot, name, newState, isDocUnsaved)
         }
 
-        return LineMarkerInfo(
-            anchor,
-            anchor.textRange,
-            icon,
-            { "Toggle feature `$name`" },
-            { _, _ -> toggleFeature() },
-            Alignment.LEFT
-        )
+        return when (cargoPackage.origin) {
+            WORKSPACE -> LineMarkerInfo(
+                anchor,
+                anchor.textRange,
+                icon,
+                { "Toggle feature `$name`" },
+                { _, _ -> toggleFeature() },
+                Alignment.LEFT
+            )
+
+            else -> LineMarkerInfo(
+                anchor,
+                anchor.textRange,
+                icon,
+                null,
+                null,
+                Alignment.LEFT
+            )
+        }
     }
 
     private fun genSettingsLineMarkerInfo(
@@ -181,7 +184,7 @@ private class FeaturesSettingsCheckboxAction(
     }
 
     override fun actionPerformed(e: AnActionEvent) {
-        cargoProjectsService.toggleAllFeatures(cargoProject, cargoPackage.rootDirectory.toString(), selectAll)
+        cargoProjectsService.updateAllFeatures(cargoProject, cargoPackage.rootDirectory.toString(), selectAll)
 //        cargoPackage.syncAllFeatures(selectAll)
 
         runWriteAction {
